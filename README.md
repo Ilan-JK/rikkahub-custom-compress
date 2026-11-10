@@ -1,3 +1,5 @@
+> **Unofficial modified version, 2026-11-10:** This repository is maintained by Ilan-JK and is based on [RikkaHub](https://github.com/rikkahub/rikkahub) 3.1.2. It adds a fully editable compression prompt in prompt settings. The upstream license, attribution, and notices are retained. The modified work is distributed under [AGPL-3.0](LICENSE), without warranty. See [fork notes](FORK_NOTES.md). The upstream project is not responsible for this version.
+
 <div align="center">
   <img src="docs/icon.png" alt="App Icon" width="100" />
   <h1>RikkaHub</h1>

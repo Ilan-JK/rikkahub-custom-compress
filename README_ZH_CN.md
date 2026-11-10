@@ -1,3 +1,5 @@
+> **非官方修改版，修改日期：2026-11-10。** 本仓库由 Ilan-JK 维护，基于 [RikkaHub](https://github.com/rikkahub/rikkahub) 3.1.2，新增在提示词设置页完整编辑压缩提示词的功能。保留原项目的许可、署名和声明；修改版继续以 [AGPL-3.0](LICENSE) 发布，不提供担保。详见[改版说明](FORK_NOTES.md)。原项目不对本修改版负责。
+
 <div align="center">
   <img src="docs/icon.png" alt="App 图标" width="100" />
   <h1>RikkaHub</h1>

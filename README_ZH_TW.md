@@ -1,3 +1,5 @@
+> **非官方修改版，修改日期：2026-11-10。** 本儲存庫由 Ilan-JK 維護，基於 [RikkaHub](https://github.com/rikkahub/rikkahub) 3.1.2，新增在提示詞設定頁完整編輯壓縮提示詞的功能。保留原專案的授權、署名與聲明；修改版繼續以 [AGPL-3.0](LICENSE) 發布，不提供擔保。詳見[修改說明](FORK_NOTES.md)。原專案不對本修改版負責。
+
 <div align="center">
   <img src="docs/icon.png" alt="App 圖標" width="100" />
   <h1>RikkaHub</h1>
