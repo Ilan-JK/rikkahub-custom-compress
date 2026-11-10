@@ -1,13 +1,18 @@
-# RikkaHub custom compression prompt
+# 改版说明
 
-This repository is a modified source snapshot of [RikkaHub](https://github.com/rikkahub/rikkahub) 3.1.2. It remains under the upstream [AGPL-3.0 license](LICENSE). It is not an official RikkaHub release.
+基于 [RikkaHub](https://github.com/rikkahub/rikkahub) 3.1.2，由 Ilan-JK 于 2026-11-10 修改，沿用 [AGPL-3.0](LICENSE)。
 
-Modified by Ilan-JK on 2026-11-10. Changes:
+## 恢复的能力
 
-- Added a persistent, fully editable compression prompt to the same model prompt settings page as translation, title generation, chat suggestions, and OCR. The original compression instruction is the default, and `{locale}` remains available as a placeholder.
-- Kept the existing conversation compression request flow and per-run additional instructions.
-- Added tests for prompt construction and settings persistence.
+官方 2.2.6 已支持自定义完整压缩提示词；到 3.0.0，压缩流程改写后，主体提示词固定在代码中。本版在 v3 的实现上恢复设置入口，而不是发明一种新的压缩功能。版本沿革和源码链接见 [README](README_ZH_CN.md)。
 
-Build overrides and provenance notes are documented in [tools/custom-apk](tools/custom-apk/README.md). The release attachments provide the unchanged ARM64 APK and source/build reference materials. The original prebuilt native components' full static-dependency provenance has not been independently verified; the notes distinguish confirmed sources from reference inputs. No claim of bit-for-bit reproducibility or complete legal certification is made. Signing private keys remain private; builders can sign their own builds with their own keys.
+- 在模型设置的提示词页加入“压缩历史”，与翻译、标题生成、聊天回复建议、OCR 并列。
+- 完整提示词可编辑、持久保存，也可恢复原始内容；支持 `{locale}` 变量。
+- 不改变 v3 的模型选择、历史处理、单次附加说明或摘要插入方式。
+- 增加提示词构建与设置持久化的单元测试。
 
-The local Android SDK, dependency caches, signing keys, `local.properties`, build output, and APK files are not part of this source repository. The upstream GitHub Actions workflows are excluded because the daily release workflow depends on signing and service secrets not configured for this fork.
+## 安装与构建
+
+发布文件为 15.49 MiB 的 ARM64 优化 Release APK，使用独立签名和 `me.rerere.rikkahub.debug` 包名，可与官方版并存。APK 未重新打包，本次仓库文档整理不改变安装包。
+
+[构建方法与组件来源](tools/custom-apk/README.md)记录工具链、构建覆盖和上游原生库资料。Release 附有源码与构建资料归档；私钥、账号配置和依赖缓存不上传。

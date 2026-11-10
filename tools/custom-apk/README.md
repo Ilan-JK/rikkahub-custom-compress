@@ -1,8 +1,8 @@
 # Custom APK build information
 
-Modified by Ilan-JK, 2026-11-10. This is an unofficial RikkaHub build under the root AGPL-3.0 license, without warranty.
+Modified by Ilan-JK, 2026-11-10, under the root AGPL-3.0 license.
 
-The application source used for the ARM64 APK is the initial source snapshot `b24477c2b9bb5b1da3ef1b651c47d9f9db0c20ff`. Later commits add publication documentation and build support without changing the application Kotlin implementation. This is not a claim of bit-for-bit reproducibility or a complete legal audit.
+The application source used for the ARM64 APK is the initial source snapshot `b24477c2b9bb5b1da3ef1b651c47d9f9db0c20ff`. Later commits add publication documentation and build support without changing the application Kotlin implementation.
 
 ## Toolchain used
 
@@ -35,15 +35,15 @@ gradle --no-daemon -I ../.build-tools/google-repositories.init.gradle -Prikkahub
 
 The original build used cached dependencies, existing generated baseline/startup profiles, R8 and resource optimization. Upstream includes a mutable `sqlite-android` SNAPSHOT dependency. Rebuilt APK bytes, size and signing certificate may therefore differ. General-purpose SDKs, caches and private keys are not included.
 
-## Native dependencies and remaining provenance limits
+## Native component sources
 
 The published APK is the existing, unchanged 16,247,376-byte file, SHA-256 `62111775b9aaa54d1d7a7bd342150700c2174117d0408cd50a4dd681f3fbe580`. Its prebuilt native libraries were inherited from upstream, not compiled by this fork. Source materials are attached alongside the APK for continued inspection and rebuilding:
 
 - PRoot: binary version string `5.1.107.96`; [source commit](https://github.com/termux/proot/tree/a179d3e8a4e045aaa1fb8cc3284f23509d96d353), GPL-2.0-or-later. Upstream RikkaHub [binary-update commit](https://github.com/rikkahub/rikkahub/commit/bf8ff5a27482c7e87cebdc0b0a71cac0dbed7c69).
-- The matching-era Termux package recipe declares talloc 2.4.3 and libandroid-shmem 0.7. Their upstream source archives and the package recipes from [termux-packages de396619](https://github.com/termux/termux-packages/tree/de39661946f7e8175b5dd0755121fa28cb0aebd1/packages) are attached. **These are reference inputs, not verified exact inputs for RikkaHub's statically linked binary. Its complete static-dependency provenance remains unverified.**
+- The matching-era Termux package recipe declares talloc 2.4.3 and libandroid-shmem 0.7. Their upstream source archives and the package recipes from [termux-packages de396619](https://github.com/termux/termux-packages/tree/de39661946f7e8175b5dd0755121fa28cb0aebd1/packages) are attached as reference inputs. The precise static-dependency inputs of the upstream binary have not been verified.
 - simple: [v0.6.1](https://github.com/wangfenjin/simple/tree/v0.6.1), choose its MIT license. Upstream RikkaHub [documents](https://github.com/rikkahub/rikkahub/commit/2b522f99090755f8d8ffd9a776e91157f7470867) NDK 29, API 21, Release, static libc++, `SIMPLE_WITH_JIEBA=OFF` and neutral file-prefix mapping. Source archive attached; submodules, where needed, must be obtained at the archive's `.gitmodules`/gitlink versions.
 - Terminal emulator source and attribution: `terminal/README.md` and `terminal/LICENSE` (Apache-2.0).
 - Material color utilities: `material3/material-color-utilities/kotlin/LICENSE` (Apache-2.0).
-- Other runtime libraries: versions in the Gradle catalog and pnpm lockfile; retained embedded license/notice files in the APK. This is not an exhaustive third-party license inventory.
+- Other runtime libraries: versions in the Gradle catalog and pnpm lockfile; retained embedded license/notice files in the APK.
 
 Full license texts for the attached third-party sources are in their archives. Their licenses continue to apply; they are not replaced by the application's AGPL license. The application's About links in this existing APK still point to upstream; use this repository and the release attachments for this fork's source. A future rebuilt version should expose this fork's source directly in its Android and web interfaces.

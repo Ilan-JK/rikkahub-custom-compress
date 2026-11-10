@@ -1,99 +1,39 @@
-> **非官方修改版，修改日期：2026-11-10。** 本儲存庫由 Ilan-JK 維護，基於 [RikkaHub](https://github.com/rikkahub/rikkahub) 3.1.2，新增在提示詞設定頁完整編輯壓縮提示詞的功能。保留原專案的授權、署名與聲明；修改版繼續以 [AGPL-3.0](LICENSE) 發布，不提供擔保。詳見[修改說明](FORK_NOTES.md)。原專案不對本修改版負責。
+# RikkaHub 自訂壓縮提示詞版
 
-<div align="center">
-  <img src="docs/icon.png" alt="App 圖標" width="100" />
-  <h1>RikkaHub</h1>
+<img src="docs/icon.png" alt="RikkaHub 圖示" width="80" />
 
-一個原生Android LLM 聊天客戶端，支持切換不同的供應商進行聊天 🤖💬
+在 RikkaHub 3.1.2 上恢復完整的壓縮提示詞自訂能力，保留 v3 的壓縮流程。
 
-點擊加入我們的Discord伺服器 👉 [【RikkaHub】](https://discord.gg/9weBqxe5c4)
+[简体中文](README_ZH_CN.md) | 繁體中文 | [English](README.md)
 
-[English](README.md) | 繁體中文 | [简体中文](README_ZH_CN.md)
+## 下載
 
-</div>
+**[下載 ARM64 APK](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/download/v3.1.2-custom-compress-1/RikkaHub-3.1.2-custom-compress-arm64-optimized.apk)** · [版本說明與原始碼資料](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/latest)
 
-<div align="center">
-  <img src="docs/img/poster.png" alt="RikkaHub" width="800" />
-</div>
+版本 `3.1.2-custom-compress-1`，15.49 MiB，Android 8.0 及以上，ARM64。
 
-## 🚀 下載
+套件名稱為 `me.rerere.rikkahub.debug`，使用獨立簽章，可與官方版並存，不能直接覆蓋官方版。安裝包是經過最佳化的 Release 建置，套件名稱中的 `.debug` 不代表可偵錯建置。
 
-🔗 [前往官網下載](https://rikka-ai.com/download)（推薦）
+## 本版改了什麼
 
-🔗 [前往 Google Play 下載](https://play.google.com/store/apps/details?id=me.rerere.rikkahub)
+在 **設定 → 模型 → 提示詞 → 壓縮歷史** 中，可以編輯並儲存完整的壓縮提示詞。它與翻譯、標題產生、聊天回覆建議及 OCR 辨識放在同一頁面，支援還原原始提示詞和 `{locale}` 語言變數。
 
-> [!WARNING]
-> RikkaHub 存在許多 fork 版本，fork 版本出現問題與 RikkaHub 無關，請謹慎使用 fork 版本，避免隱私洩露或者過度索要權限問題。
+壓縮時的模型選擇、歷史處理、單次附加說明及摘要插入方式沿用 v3 實作。這次恢復的是提示詞自訂能力，不是退回舊版壓縮邏輯，也沒有恢復舊版獨立的壓縮模型設定。提示詞建構與設定持久化均有針對性的單元測試。
 
-## 💖 贊助商
+## 為什麼說「恢復」
 
-| 贊助商 | 介紹 |
-|:---:|:---|
-| <img src="docs/sponsors/sta1n.png" alt="STA1N API" width="50" /><br /><b><a href="https://sta1n.ai">STA1N API🍪</a></b> | 感謝<a href="https://sta1n.ai">STA1N API</a>對本項目的贊助！主營 RP 的站。 |
-| <img src="docs/sponsors/api-mart.png" alt="APIMart" width="50" /><br /><b><a href="https://go.apimart.ai/gh-rikkahub">APIMart</a></b> | 感謝 APIMart 贊助了本專案！APIMart 是專注 AI 圖片/影片生成的低價 API 平台，GPT-Image-2 低至 $0.006/張，1 美元可出圖 160+ 張。圖片、影片一套非同步 API 通吃，提交任務拿 ID、回呼取結果，批次生成萬張不逾時、換模型不改程式碼。按量付費、無月費，透過<a href="https://go.apimart.ai/gh-rikkahub">此註冊連結</a>註冊即可開始使用。 |
-| <img src="docs/sponsors/suixiang.jpg" alt="隨想AI網關" width="50" /><br /><b>隨想AI網關</b> | 感謝隨想AI網關對本項目的贊助！隨想AI網關 是一家可靠高效的 API 中繼服務提供商，提供 Claude、Codex、Gemini 等的中繼服務。注重隱私的中轉站·無數據倒賣·無模型摻水，隱私，透明，極速售後。新帳戶註冊每日簽到就送 0.5 元測試額度，儲值額度 1:1，無需訂閱，按量付費。多線路冗餘、跨區域容災、自動故障切換，長鏈路 SSE 不中斷。99.9% 可用性，關鍵呼叫從不掉隊。 |
-| <img src="docs/sponsors/maru.png" alt="MaruCode" width="50" /><br /><b><a href="https://api.muteki.site/register?aff=Rikkahub&promo=Rikkahub">MaruCode</a></b> | <b><a href="https://api.muteki.site/register?aff=Rikkahub&promo=Rikkahub">MaruCode</a></b> 是一家偶爾做做慈善的小破站 API，自營號池，主要提供 Codex、Claude Code、GPT Image 等主流模型，支援 Websocket 協定，明碼標價(Codex 0.25x, CC 1.5x)，透明匯率(1:1)，<a href="https://api.muteki.site/register?aff=Rikkahub&promo=Rikkahub">新用戶註冊送 2 刀</a>。<a href="https://images-2.muteki.site">生图工作台🖼️</a> |
-| <img src="docs/sponsors/naapi.png" alt="鈉API" width="50" /><br /><b><a href="https://naapi.cc/register?aff=rikkahub">鈉API</a></b> | 感謝<a href="https://naapi.cc/register?aff=rikkahub">鈉API</a>對本項目的贊助！鈉API（naapi.cc）是 OpenAI 相容的 LLM 閘道，以優惠價格提供 OpenAI、Anthropic、Google 等 300+ 模型存取。一個 base URL 加一個 key 即可接入；多線路冗餘、自動故障切換，長鏈路 SSE 不中斷；按量付費、儲值額度 1:1，無訂閱、無隱藏加價。 |
+自訂壓縮提示詞不是本專案首創，而是 RikkaHub 曾經提供過的功能：
 
-## ✨ 功能特色
+- 官方 **2.2.6** 已提供[壓縮提示詞編輯介面](https://github.com/rikkahub/rikkahub/blob/dcc14b016bf9411b7dd032794efd40cfc79e1ad2/app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingModelPromptPage.kt#L158)，儲存使用者自訂的 `compressPrompt`，壓縮時也讀取它。見[設定儲存](https://github.com/rikkahub/rikkahub/blob/dcc14b016bf9411b7dd032794efd40cfc79e1ad2/app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt#L183)及[壓縮呼叫](https://github.com/rikkahub/rikkahub/blob/dcc14b016bf9411b7dd032794efd40cfc79e1ad2/app/src/main/java/me/rerere/rikkahub/service/ChatService.kt#L845)。
+- 到 **3.0.0**，壓縮流程調整後，主體提示詞[固定在 `buildCompressPrompt` 中](https://github.com/rikkahub/rikkahub/blob/55a108a4477fa308d6eacbe22ebf2fb0ceea1420/app/src/main/java/me/rerere/rikkahub/data/ai/prompts/CompressPrompt.kt)。使用者仍可填寫單次附加說明，但不能再透過設定替換完整提示詞。
+- 本版在 3.1.2 原始碼上重新開放這個設定，不回退 v3 的壓縮流程。
 
-- 🎨 現代化安卓APP設計（Material 3 Expressive / 預測性返回）和 🌙 暗色模式
-- 📦 工作區：基於 proot 的 Linux 智能體環境
-- 🎬 媒體生成（圖片、影片）
-- 🖥️ Web多端訪問支持
-- 🛠️ MCP 與 Skills 支持
-- 🔄 多種類型的供應商支持，自定義 API / URL / 模型（目前支持 OpenAI、Google、Anthropic）
-- 🖼️ 多模態輸入支持
-- 📝 Markdown 渲染（支持代碼高亮、數學公式、表格、Mermaid）
-- 🔍 搜尋功能（Exa、Tavily、Zhipu、LinkUp、Brave、Perplexity、..）
-- 🧩 Prompt 變量（模型名稱、時間等）
-- 🤳 二維碼導出和導入提供商
-- 🤖 智能體自定義
-- 🧠 基於檔案的記憶
-- 📝 AI翻譯
-- 🌐 自定義HTTP請求頭和請求體
+## 原始碼與建置
 
-## ✨ 開發
+[修改說明](FORK_NOTES.md) · [建置方法與元件來源](tools/custom-apk/README.md)
 
-> [!IMPORTANT]
-> 本項目不接受 Pull Request（PR）。
+## 致謝與授權
 
-本項目使用[Android Studio](https://developer.android.com/studio)開發。
+基於 [RikkaHub](https://github.com/rikkahub/rikkahub)，感謝 [re-ovo](https://github.com/re-ovo) 及所有上游貢獻者。本社群修改版由 Ilan-JK 維護，修改日期為 2026-11-10。
 
-技術棧文檔:
-
-- [Kotlin](https://kotlinlang.org/) (開發語言)
-- [Koin](https://insert-koin.io/) (依賴注入)
-- [Jetpack Compose](https://developer.android.com/jetpack/compose) (UI 框架)
-- [DataStore](https://developer.android.com/topic/libraries/architecture/datastore?hl=zh-cn#preferences-datastore) (
-  偏好數據存儲)
-- [Room](https://developer.android.com/training/data-storage/room) (數據庫)
-- [Coil](https://coil-kt.github.io/coil/) (圖片加載)
-- [Material 3 Expressive](https://m3.material.io/) (UI 設計)
-- [Navigation 3](https://developer.android.com/guide/navigation/navigation-3) (導航)
-- [Okhttp](https://square.github.io/okhttp/) (HTTP 客戶端)
-- [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) (Json序列化)
-
-> [!TIP]
-> 你需要在 `app` 資料夾下添加 `google-services.json` 檔案才能構建應用。
-
-## 💰 捐贈
-
-* [Ko-fi](https://ko-fi.com/reovodev)
-* [愛發電](https://afdian.com/a/reovo)
-
-## ⭐ Star History
-
-如果喜歡這個項目，請給個Star ⭐
-
-<a href="https://www.star-history.com/?type=date&repos=re-ovo%2Frikkahub">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=re-ovo/rikkahub&type=date&theme=dark&legend=top-left&sealed_token=qSytWeq7LkzQQViTjK0MYlvvA_qkfuwjOxOqgbRpLUZZwok5rO6LXhpVL7Mq-q3o89BfKpzE7g66BCy18H6eiqTsD8czD0J-HejLqmHy-npcvCTHu11wZw" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=re-ovo/rikkahub&type=date&legend=top-left&sealed_token=qSytWeq7LkzQQViTjK0MYlvvA_qkfuwjOxOqgbRpLUZZwok5rO6LXhpVL7Mq-q3o89BfKpzE7g66BCy18H6eiqTsD8czD0J-HejLqmHy-npcvCTHu11wZw" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=re-ovo/rikkahub&type=date&legend=top-left&sealed_token=qSytWeq7LkzQQViTjK0MYlvvA_qkfuwjOxOqgbRpLUZZwok5rO6LXhpVL7Mq-q3o89BfKpzE7g66BCy18H6eiqTsD8czD0J-HejLqmHy-npcvCTHu11wZw" />
- </picture>
-</a>
-
-## 📄 許可證
-
-本項目基於 [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0) 開源。
+專案繼續採用 [AGPL-3.0](LICENSE)，保留原有著作權及第三方授權聲明。
