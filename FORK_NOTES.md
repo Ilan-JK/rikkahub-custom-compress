@@ -8,6 +8,6 @@ Modified by Ilan-JK on 2026-11-10. Changes:
 - Kept the existing conversation compression request flow and per-run additional instructions.
 - Added tests for prompt construction and settings persistence.
 
-Local scripts and build overrides used to produce the privately delivered, separately signed APK are not included in this source snapshot. This repository does not currently provide an APK release or a complete reproduction guide for that APK. Before publishing an APK, supply the corresponding non-secret build overrides and instructions, a source revision link, and applicable third-party notices and source information. Signing private keys must remain private; builders can sign their own builds with their own keys.
+Build overrides and provenance notes are documented in [tools/custom-apk](tools/custom-apk/README.md). The release attachments provide the unchanged ARM64 APK and source/build reference materials. The original prebuilt native components' full static-dependency provenance has not been independently verified; the notes distinguish confirmed sources from reference inputs. No claim of bit-for-bit reproducibility or complete legal certification is made. Signing private keys remain private; builders can sign their own builds with their own keys.
 
 The local Android SDK, dependency caches, signing keys, `local.properties`, build output, and APK files are not part of this source repository. The upstream GitHub Actions workflows are excluded because the daily release workflow depends on signing and service secrets not configured for this fork.

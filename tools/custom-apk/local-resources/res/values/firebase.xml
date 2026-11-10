@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="google_app_id" translatable="false">1:123456789012:android:0123456789abcdef012345</string>
+    <string name="project_id" translatable="false">rikkahub-local-build</string>
+</resources>

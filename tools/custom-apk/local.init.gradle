@@ -1,0 +1,32 @@
+allprojects { project ->
+    project.plugins.withId('com.android.application') {
+        def optimized = project.providers.gradleProperty('rikkahub.localOptimized').orNull == 'true'
+        if (project.path == ':app' && optimized) {
+            project.extensions.getByName('androidComponents').finalizeDsl { android ->
+                def release = android.buildTypes.getByName('release')
+                release.applicationIdSuffix = '.debug'
+                release.signingConfig = android.signingConfigs.getByName('debug')
+                release.debuggable = false
+                release.optimization.enable = true
+            }
+        }
+        if (project.path == ':app' && !project.file('google-services.json').exists()) {
+            def resources = new File(project.rootProject.projectDir, 'tools/custom-apk/local-resources')
+            def debugSource = project.extensions.getByName('android').sourceSets.getByName('debug')
+            debugSource.res.srcDir(new File(resources, 'res'))
+            debugSource.manifest.srcFile(new File(resources, 'AndroidManifest.xml'))
+            if (optimized) {
+                def releaseSource = project.extensions.getByName('android').sourceSets.getByName('release')
+                releaseSource.res.srcDir(new File(resources, 'res'))
+                releaseSource.manifest.srcFile(new File(resources, 'AndroidManifest.xml'))
+            }
+            project.tasks.configureEach { task ->
+                if (task.name ==~ /process.*DebugGoogleServices/ ||
+                    (optimized && task.name ==~ /process.*ReleaseGoogleServices/) ||
+                    (optimized && task.name.startsWith('uploadCrashlytics'))) {
+                    task.enabled = false
+                }
+            }
+        }
+    }
+}
