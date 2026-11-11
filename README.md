@@ -12,7 +12,7 @@ Context-compression customization based on RikkaHub 3.2.0, maintained by Ilan-JK
 
 Version `3.2.0-custom-compress-1`, 16.33 MB (15.57 MiB), Android 8.0+, ARM64.
 
-The package ID is `me.rerere.rikkahub.debug`, with a separate signing certificate, so it installs alongside the official app rather than replacing it. The APK is an optimized Release build; `.debug` in the package ID does not mean a debuggable build.
+The package ID is `me.rerere.rikkahub.debug`, with a separate signing certificate, so it installs alongside the official app rather than replacing it.
 
 ## What This Version Changes
 
@@ -20,13 +20,8 @@ In **Settings > Model > Prompts > Compress history**, edit and save the entire c
 
 - Independent manual and automatic ranges: compress the earliest messages or keep the latest messages, with separately saved counts (default 20).
 - Automatic compression by token ratio or uncovered-message count (default 50); count-based compression runs only when the completed turn is idle.
-- Summary checkpoints and covered originals do not count toward trigger, compression or retention limits.
 - Read only the latest summary or all summaries together; covered originals remain local and are excluded from requests.
 - Editable and resettable full and mid-turn compression prompts, shared by manual and automatic compression.
-- Custom update-reminder pause duration, concise fork attribution, and no automatic donation popup.
-- Removed system-calendar tools and permissions; the local usage heatmap is independent of system calendars.
-
-The APK uses an optimized Release build with code and resource shrinking. Device performance and all provider workflows have not been fully verified.
 
 ## Why Restore It?
 
