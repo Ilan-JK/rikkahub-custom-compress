@@ -13,6 +13,28 @@ class CompressionSettingsTest {
         assertEquals(20, value.manualRange.keepRecentCount)
         assertEquals(value.manualRange, value.automaticRange)
         assertEquals(AutoCompressionTrigger.TOKEN_RATIO, value.trigger)
+        assertEquals(CompressionRequestSettings(), value.request)
+        assertEquals(CompressionPromptRole.USER, value.request.promptRole)
+    }
+
+    @Test
+    fun `request options persist independently of prompts and ranges`() {
+        val request = CompressionRequestSettings(
+            promptRole = CompressionPromptRole.SYSTEM,
+            includeAssistantPrompt = false,
+            includeModeInjections = false,
+            includeLorebooks = false,
+            includeMemory = false,
+            includeTools = false,
+            includeTimeReminders = false,
+            includeWorkspace = false,
+            includeMessageTemplate = false,
+        )
+        val settings = CompressionSettings(request = request)
+        assertEquals(settings, Json.decodeFromString<CompressionSettings>(Json.encodeToString(settings)))
+        assertEquals(request, settings.normalized().request)
+        assertEquals(CompressionRange(), settings.manualRange)
+        assertEquals(CompressionRange(), settings.automaticRange)
     }
 
     @Test

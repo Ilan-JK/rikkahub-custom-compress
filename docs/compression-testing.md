@@ -19,6 +19,8 @@ without adding dependencies or changing dependency injection.
   mid-turn instructions.
 - `MessageContextLimitTest`: latest/all-summary selection, ordering and exclusion of
   covered originals.
+- `CompressionRequestTest`: shared request options, independent mode/lorebook
+  filtering, system-context exclusions and user/system compression instructions.
 
 Run `:ai:testDebugUnitTest :app:testGithubDebugUnitTest` with the project's Gradle
 environment. A successful JVM test run does not validate device UI or provider APIs.
@@ -26,6 +28,12 @@ environment. A successful JVM test run does not validate device UI or provider A
 ## Device Acceptance Checks
 
 - Edit and restore both compression prompts under Model Settings / Prompts.
+- Under Compression Request Settings, toggle each optional input and inspect the
+  outgoing request in manual, idle automatic and mid-turn compression.
+- Switch the instruction role between user and system; confirm the full instruction
+  is in the final user message or the first merged system message respectively.
+- Verify excluded tool definitions do not remove historical tool results, and that
+  disabling optional inputs does not alter normal chat requests or local messages.
 - Change both manual range counts, switch modes, close/reopen and restart the app.
 - Independently change the automatic range and trigger; verify saved values.
 - Create multiple checkpoints and inspect provider requests for latest/all modes.

@@ -1126,7 +1126,7 @@ class ChatService(
         }) { context.getString(R.string.chat_page_compress_handle_pending_tools) }
 
         // 必须和对话用同一个模型、同一套请求组装，才能命中提示词缓存
-        val turn = requestFactory.createContext(settingsStore.awaitLoaded(), conversation)
+        val turn = requestFactory.createContext(settingsStore.awaitLoaded(), conversation, compression = true)
         check(turn.assistant.contextMessageLimit <= 0) { "请先关闭助手的上下文信息数量限制，再使用摘要压缩。" }
         check(turn.settings.compression.prompt.isNotBlank()) { "压缩历史提示词不能为空。" }
         val summary = requestFactory.generateCompressionSummary(

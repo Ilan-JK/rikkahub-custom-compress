@@ -47,6 +47,7 @@ import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_MID_TURN_COMPRESS_PROMPT
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
+import me.rerere.rikkahub.ui.components.ai.CompressionRequestSheet
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.CardGroupIcon
 import me.rerere.rikkahub.ui.components.ui.CardGroupScope
@@ -55,6 +56,7 @@ import me.rerere.rikkahub.ui.components.ui.CardGroupScope
 internal fun PromptSettingsPage(settings: Settings, vm: SettingVM, contentPadding: PaddingValues) {
     // 正在编辑哪一项；编辑弹窗放在列表外面，CardGroup 里放不了
     var editing by remember { mutableStateOf<PromptSlot?>(null) }
+    var showCompressionRequest by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -103,6 +105,27 @@ internal fun PromptSettingsPage(settings: Settings, vm: SettingVM, contentPaddin
                 }
             }
         }
+        item {
+            CardGroup {
+                item(
+                    onClick = { showCompressionRequest = true },
+                    headlineContent = { Text("压缩发送配置") },
+                    trailingContent = { Icon(HugeIcons.ArrowRight01, contentDescription = null) },
+                )
+            }
+        }
+    }
+
+    if (showCompressionRequest) {
+        CompressionRequestSheet(
+            settings = settings.compression.request,
+            onUpdate = { update ->
+                vm.updateSettings { latest ->
+                    latest.copy(compression = latest.compression.copy(request = update(latest.compression.request)))
+                }
+            },
+            onDismiss = { showCompressionRequest = false },
+        )
     }
 
     editing?.let { slot ->
@@ -135,7 +158,7 @@ private enum class PromptSlot(
         default = DEFAULT_COMPRESS_PROMPT,
         get = { it.compression.prompt },
         set = { settings, value -> settings.copy(compression = settings.compression.copy(prompt = value)) },
-        customTitle = "压缩历史提示词",
+        customTitle = "压缩历史",
     ),
     MID_TURN_COMPRESSION(
         icon = HugeIcons.Heading,
@@ -144,7 +167,7 @@ private enum class PromptSlot(
         default = DEFAULT_MID_TURN_COMPRESS_PROMPT,
         get = { it.compression.midTurnPrompt },
         set = { settings, value -> settings.copy(compression = settings.compression.copy(midTurnPrompt = value)) },
-        customTitle = "中途压缩附加提示词",
+        customTitle = "中途压缩附加",
     ),
     TRANSLATION(
         icon = HugeIcons.Translate,

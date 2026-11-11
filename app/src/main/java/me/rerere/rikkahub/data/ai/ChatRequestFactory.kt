@@ -42,6 +42,8 @@ import me.rerere.rikkahub.data.ai.transformers.transformThinkTags
 import me.rerere.rikkahub.data.ai.transformers.transforms
 import me.rerere.rikkahub.data.ai.transformers.visualTransforms
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.CompressionPromptRole
+import me.rerere.rikkahub.data.datastore.CompressionRequestSettings
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
@@ -59,8 +61,7 @@ private const val TAG = "ChatRequestFactory"
 /**
  * 一轮对话的请求上下文，按会话固定的配置解析一次。
  *
- * 正常对话和压缩用同一份上下文组装请求，系统提示词、工具定义、参数和 sessionId 都相同，
- * 压缩请求的前缀才能和上一轮对话一致，命中提示词缓存。
+ * 压缩默认复用正常对话配置，也可按压缩请求设置排除部分内容。
  */
 class ChatTurnContext(
     val settings: Settings,
@@ -101,7 +102,7 @@ class ChatRequestFactory(
     )
 
     /** 解析本轮的助手、模型、记忆和工具；MCP 服务名不合法时抛出 InvalidMcpServerNamesException */
-    suspend fun createContext(settings: Settings, conversation: Conversation): ChatTurnContext {
+    suspend fun createContext(settings: Settings, conversation: Conversation, compression: Boolean = false): ChatTurnContext {
         // 模型、思考级别、搜索、工具等以会话上固定的配置为准
         val assistant = settings.getAssistantOf(conversation)
         val model = settings.getChatModelOf(conversation)
@@ -115,8 +116,10 @@ class ChatRequestFactory(
             conversationId = conversation.id,
             conversationSystemPrompt = conversation.customSystemPrompt,
             workspaceCwd = conversation.workspaceCwd,
-            memories = if (assistant.enableMemory) memoryRepository.getFiles(assistant.memoryId) else emptyList(),
-            tools = chatToolFactory.createTools(
+            memories = if (assistant.enableMemory && (!compression || settings.compression.request.includeMemory)) {
+                memoryRepository.getFiles(assistant.memoryId)
+            } else emptyList(),
+            tools = if (compression && !settings.compression.request.includeTools) emptyList() else chatToolFactory.createTools(
                 settings = settings,
                 assistant = assistant,
                 model = model,
@@ -177,9 +180,8 @@ class ChatRequestFactory(
     /**
      * 生成压缩摘要。
      *
-     * 请求按正常对话组装（系统提示词、工具定义、参数和 sessionId 都相同），只在末尾追加压缩指令，
-     * 前缀与上一轮对话一致，可以命中提示词缓存，模型也能看到工具调用和结果。
-     * 工具定义必须保留：它属于请求前缀，去掉或改动 tool_choice 都会让缓存失效。
+     * 手动、自动及中途压缩共用发送内容和指令角色设置。
+     * 默认保留正常对话前缀；修改发送内容或角色可能影响提示词缓存。
      */
     suspend fun generateCompressionSummary(
         turn: ChatTurnContext,
@@ -202,7 +204,7 @@ class ChatRequestFactory(
         messages: List<UIMessage>,
         compressPrompt: String,
     ): String {
-        val (requestMessages, params) = buildStep(turn, messages)
+        val (requestMessages, params) = buildStep(turn, messages, compression = turn.settings.compression.request)
         // 压缩指令不经过输入转换器，模板转换器会把其中的花括号当成模板语法
         val result = withRetry(
             policy = turn.settings.retryPolicy(),
@@ -213,7 +215,7 @@ class ChatRequestFactory(
                 UsageTag(UsageSource.COMPRESSION, turn.assistant.id, turn.conversationId),
             ).generateText(
                 providerSetting = turn.providerSetting,
-                messages = requestMessages + UIMessage.user(compressPrompt),
+                messages = requestMessages.withCompressionPrompt(compressPrompt, turn.settings.compression.request.promptRole),
                 // 助手的输出上限是给聊天回复定的，结构化摘要写不完会被截断；max_tokens 不属于请求前缀，改了不影响缓存
                 params = params.copy(maxTokens = null),
             )
@@ -223,36 +225,25 @@ class ChatRequestFactory(
         return summary.ifBlank { error("Failed to generate compressed summary") }
     }
 
-    /** 一步请求实际发出的消息和参数；正常对话和压缩共用，二者的请求前缀必须一致才能命中提示词缓存 */
+    /** 正常对话保持原有组装方式，压缩请求按共用配置筛选附加内容。 */
     private suspend fun buildStep(
         turn: ChatTurnContext,
         messages: List<UIMessage>,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
+        compression: CompressionRequestSettings? = null,
     ): StepRequest {
-        val assistant = turn.assistant
+        val assistant = turn.assistant.forCompression(compression)
+        val tools = if (compression?.includeTools == false) emptyList() else turn.tools
         val requestMessages = buildList {
-            val system = buildString {
-                val effectiveSystemPrompt =
-                    if (assistant.allowConversationSystemPrompt && !turn.conversationSystemPrompt.isNullOrBlank()) {
-                        turn.conversationSystemPrompt
-                    } else {
-                        assistant.systemPrompt
-                    }
-                if (effectiveSystemPrompt.isNotBlank()) {
-                    append(effectiveSystemPrompt)
-                }
-
-                // 记忆
-                if (assistant.enableMemory) {
-                    appendLine()
-                    append(buildMemoryPrompt(turn.memories))
-                }
-                // 工具prompt
-                turn.tools.forEach { tool ->
-                    appendLine()
-                    append(tool.systemPrompt(turn.model, messages))
-                }
-            }
+            val system = buildRequestSystemPrompt(
+                assistant = assistant,
+                conversationSystemPrompt = turn.conversationSystemPrompt,
+                memoryPrompt = if (assistant.enableMemory && compression?.includeMemory != false) {
+                    buildMemoryPrompt(turn.memories)
+                } else null,
+                toolPrompts = tools.map { it.systemPrompt(turn.model, messages) },
+                compression = compression,
+            )
             if (system.isNotBlank()) {
                 add(UIMessage.system(prompt = system).copy(isSynthetic = true))
             }
@@ -261,20 +252,22 @@ class ChatRequestFactory(
                     .withContinuationHint()
             )
         }.transforms(
-            transformers = inputTransformers,
+            transformers = inputTransformers.filter { it.includedInCompression(compression) },
             context = context,
             model = turn.model,
             assistant = assistant,
             settings = turn.settings,
             processingStatus = processingStatus,
             workspaceCwd = turn.workspaceCwd,
-        ).expandNotices()
+        ).expandNotices().let {
+            if (compression?.includeTools == false) it.withToolHistoryAsText() else it
+        }
         val params = TextGenerationParams(
             model = turn.model,
             temperature = assistant.temperature,
             topP = assistant.topP,
             maxTokens = assistant.maxTokens,
-            tools = turn.tools,
+            tools = tools,
             reasoningLevel = assistant.reasoningLevel,
             customHeaders = buildList {
                 addAll(assistant.customHeaders)
@@ -288,6 +281,80 @@ class ChatRequestFactory(
         )
         return StepRequest(requestMessages, params)
     }
+}
+
+internal fun buildRequestSystemPrompt(
+    assistant: Assistant,
+    conversationSystemPrompt: String?,
+    memoryPrompt: String?,
+    toolPrompts: List<String>,
+    compression: CompressionRequestSettings?,
+): String = buildString {
+    if (compression?.includeAssistantPrompt != false) {
+        append(
+            if (assistant.allowConversationSystemPrompt && !conversationSystemPrompt.isNullOrBlank()) {
+                conversationSystemPrompt
+            } else assistant.systemPrompt
+        )
+    }
+    if (assistant.enableMemory && compression?.includeMemory != false && memoryPrompt != null) {
+        appendLine()
+        append(memoryPrompt)
+    }
+    if (compression?.includeTools != false) {
+        toolPrompts.forEach {
+            appendLine()
+            append(it)
+        }
+    }
+}
+
+internal fun Assistant.forCompression(options: CompressionRequestSettings?): Assistant = if (options == null) this else copy(
+    modeInjectionIds = if (options.includeModeInjections) modeInjectionIds else emptySet(),
+    lorebookIds = if (options.includeLorebooks) lorebookIds else emptySet(),
+)
+
+internal fun InputMessageTransformer.includedInCompression(options: CompressionRequestSettings?): Boolean = when {
+    options == null -> true
+    this is TimeReminderTransformer -> options.includeTimeReminders
+    this is WorkspaceReminderTransformer -> options.includeWorkspace
+    this is TemplateTransformer -> options.includeMessageTemplate
+    else -> true
+}
+
+internal fun List<UIMessage>.withCompressionPrompt(prompt: String, role: CompressionPromptRole): List<UIMessage> {
+    if (role == CompressionPromptRole.USER) return this + UIMessage.user(prompt)
+    // Claude 和 Google 只读取第一条系统信息，必须合并，且压缩指令放在系统内容末尾。
+    val systemParts = filter { it.role == MessageRole.SYSTEM }.flatMap { it.parts }
+    val system = UIMessage.system("").copy(
+        parts = systemParts + UIMessagePart.Text(prompt),
+        isSynthetic = true,
+    )
+    return listOf(system) + filter { it.role != MessageRole.SYSTEM }
+}
+
+@Suppress("DEPRECATION")
+internal fun List<UIMessage>.withToolHistoryAsText(): List<UIMessage> = map { message ->
+    message.copy(
+        role = if (message.role == MessageRole.TOOL) MessageRole.USER else message.role,
+        parts = message.parts.flatMap { part ->
+            when (part) {
+                is UIMessagePart.Tool -> listOf(
+                    UIMessagePart.Text("[Tool: ${part.toolName}]\nInput: ${part.input}\nResult:"),
+                ) + part.output
+                is UIMessagePart.ServerTool -> listOf(
+                    UIMessagePart.Text("[Server tool: ${part.toolName}]\nInput: ${part.input}\nResult: ${part.output}"),
+                )
+                is UIMessagePart.ToolCall -> listOf(
+                    UIMessagePart.Text("[Tool: ${part.toolName}]\nInput: ${part.arguments}"),
+                )
+                is UIMessagePart.ToolResult -> listOf(
+                    UIMessagePart.Text("[Tool result: ${part.toolName}]\n${part.content}"),
+                )
+                else -> listOf(part)
+            }
+        },
+    )
 }
 
 private const val CONTINUATION_HINT =
