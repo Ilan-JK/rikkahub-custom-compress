@@ -1,9 +1,11 @@
 package me.rerere.rikkahub.data.datastore
 
 import kotlinx.serialization.Serializable
+import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.ui.ContextSummaryMode
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_MID_TURN_COMPRESS_PROMPT
+import kotlin.uuid.Uuid
 
 @Serializable
 enum class CompressionRangeMode { EARLIEST, KEEP_RECENT }
@@ -46,6 +48,8 @@ data class CompressionRange(
 
 @Serializable
 data class CompressionSettings(
+    val modelId: Uuid? = null,
+    val reasoningLevel: ReasoningLevel = ReasoningLevel.AUTO,
     val prompt: String = DEFAULT_COMPRESS_PROMPT,
     val midTurnPrompt: String = DEFAULT_MID_TURN_COMPRESS_PROMPT,
     val manualRange: CompressionRange = CompressionRange(),

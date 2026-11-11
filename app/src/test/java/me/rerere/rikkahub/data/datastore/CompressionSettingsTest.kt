@@ -1,8 +1,13 @@
 package me.rerere.rikkahub.data.datastore
 
 import kotlinx.serialization.json.Json
+import me.rerere.ai.core.ReasoningLevel
+import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ProviderSetting
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
+import kotlin.uuid.Uuid
 
 class CompressionSettingsTest {
     @Test
@@ -15,6 +20,36 @@ class CompressionSettingsTest {
         assertEquals(AutoCompressionTrigger.TOKEN_RATIO, value.trigger)
         assertEquals(CompressionRequestSettings(), value.request)
         assertEquals(CompressionPromptRole.USER, value.request.promptRole)
+        assertNull(value.modelId)
+        assertEquals(ReasoningLevel.AUTO, value.reasoningLevel)
+    }
+
+    @Test
+    fun `compression model and reasoning survive persistence without changing prompts or ranges`() {
+        val settings = CompressionSettings(modelId = Uuid.random(), reasoningLevel = ReasoningLevel.HIGH, prompt = "custom")
+        val restored = Json.decodeFromString<CompressionSettings>(Json.encodeToString(settings))
+
+        assertEquals(settings, restored)
+        assertEquals(settings.modelId, restored.normalized().modelId)
+        assertEquals(ReasoningLevel.HIGH, restored.normalized().reasoningLevel)
+    }
+
+    @Test
+    fun `compression model is independent of chat and fast models and does not silently fall back`() {
+        val chat = Model(modelId = "chat")
+        val summary = Model(modelId = "summary")
+        val settings = Settings(
+            chatModelId = chat.id,
+            fastModelId = chat.id,
+            providers = listOf(ProviderSetting.OpenAI(models = listOf(chat, summary))),
+            compression = CompressionSettings(modelId = summary.id),
+        )
+
+        assertEquals(summary, settings.getCompressionModel())
+        assertEquals(summary, settings.copy(chatModelId = Uuid.random()).getCompressionModel())
+        assertNull(settings.copy(compression = settings.compression.copy(modelId = null)).getCompressionModel())
+        assertNull(settings.copy(compression = settings.compression.copy(modelId = Uuid.random())).getCompressionModel())
+        assertNull(settings.copy(providers = listOf(ProviderSetting.OpenAI(models = listOf(chat)))).getCompressionModel())
     }
 
     @Test

@@ -42,6 +42,9 @@ fun Settings.getCurrentChatModel(): Model? {
     return findModelById(this.getCurrentAssistant().chatModelId ?: this.chatModelId)
 }
 
+/** 压缩模型独立选择，未设置或已删除时不回退到聊天模型。 */
+fun Settings.getCompressionModel(): Model? = findModelById(compression.modelId)
+
 /**
  * 当前选中的助手，选中的 ID 已不存在时回退到第一个助手。
  *

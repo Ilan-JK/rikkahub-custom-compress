@@ -45,6 +45,7 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.CompressionPromptRole
 import me.rerere.rikkahub.data.datastore.CompressionRequestSettings
 import me.rerere.rikkahub.data.datastore.findProvider
+import me.rerere.rikkahub.data.datastore.getCompressionModel
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MemoryFile
@@ -61,7 +62,7 @@ private const val TAG = "ChatRequestFactory"
 /**
  * 一轮对话的请求上下文，按会话固定的配置解析一次。
  *
- * 压缩默认复用正常对话配置，也可按压缩请求设置排除部分内容。
+ * 压缩使用独立模型，按压缩请求设置选择附加内容。
  */
 class ChatTurnContext(
     val settings: Settings,
@@ -105,8 +106,16 @@ class ChatRequestFactory(
     suspend fun createContext(settings: Settings, conversation: Conversation, compression: Boolean = false): ChatTurnContext {
         // 模型、思考级别、搜索、工具等以会话上固定的配置为准
         val assistant = settings.getAssistantOf(conversation)
-        val model = settings.getChatModelOf(conversation)
-            ?: throw IllegalStateException("No chat model selected")
+        val selectedModel = if (compression) {
+            settings.getCompressionModel()
+                ?: error("请先在模型设置 → 模型中选择有效的压缩历史模型。")
+        } else {
+            settings.getChatModelOf(conversation)
+                ?: throw IllegalStateException("No chat model selected")
+        }
+        val model = if (compression && !settings.compression.request.includeTools) {
+            selectedModel.copy(tools = emptySet())
+        } else selectedModel
         val provider = model.findProvider(settings.providers) ?: error("Provider not found")
         return ChatTurnContext(
             settings = settings,
@@ -181,7 +190,7 @@ class ChatRequestFactory(
      * 生成压缩摘要。
      *
      * 手动、自动及中途压缩共用发送内容和指令角色设置。
-     * 默认保留正常对话前缀；修改发送内容或角色可能影响提示词缓存。
+     * 历史作为待处理材料发送，不作为本轮正在进行的对话。
      */
     suspend fun generateCompressionSummary(
         turn: ChatTurnContext,
@@ -216,8 +225,7 @@ class ChatRequestFactory(
             ).generateText(
                 providerSetting = turn.providerSetting,
                 messages = requestMessages.withCompressionPrompt(compressPrompt, turn.settings.compression.request.promptRole),
-                // 助手的输出上限是给聊天回复定的，结构化摘要写不完会被截断；max_tokens 不属于请求前缀，改了不影响缓存
-                params = params.copy(maxTokens = null),
+                params = params,
             )
         }
         val summary = result.message.compressionSummaryOrNull()
@@ -249,7 +257,7 @@ class ChatRequestFactory(
             }
             addAll(
                 messages.limitContext(assistant.contextMessageLimit, turn.settings.compression.summaryMode)
-                    .withContinuationHint()
+                    .let { if (compression == null) it.withContinuationHint() else it }
             )
         }.transforms(
             transformers = inputTransformers.filter { it.includedInCompression(compression) },
@@ -259,10 +267,14 @@ class ChatRequestFactory(
             settings = turn.settings,
             processingStatus = processingStatus,
             workspaceCwd = turn.workspaceCwd,
-        ).expandNotices().let {
-            if (compression?.includeTools == false) it.withToolHistoryAsText() else it
-        }
-        val params = TextGenerationParams(
+        ).expandNotices()
+        val params = if (compression != null) {
+            backgroundTextGenerationParams(
+                model = turn.model,
+                sessionId = turn.conversationId,
+                reasoningLevel = turn.settings.compression.reasoningLevel,
+            ).copy(tools = tools)
+        } else TextGenerationParams(
             model = turn.model,
             temperature = assistant.temperature,
             topP = assistant.topP,
@@ -323,14 +335,32 @@ internal fun InputMessageTransformer.includedInCompression(options: CompressionR
 }
 
 internal fun List<UIMessage>.withCompressionPrompt(prompt: String, role: CompressionPromptRole): List<UIMessage> {
-    if (role == CompressionPromptRole.USER) return this + UIMessage.user(prompt)
-    // Claude 和 Google 只读取第一条系统信息，必须合并，且压缩指令放在系统内容末尾。
-    val systemParts = filter { it.role == MessageRole.SYSTEM }.flatMap { it.parts }
-    val system = UIMessage.system("").copy(
-        parts = systemParts + UIMessagePart.Text(prompt),
+    val messages = withExistingSummaryMarkers()
+    val systemParts = messages.filter { it.role == MessageRole.SYSTEM }.flatMap { it.parts }
+    val history = UIMessage.user("").copy(
+        parts = buildList {
+            add(UIMessagePart.Text("<conversation_history type=\"source_material\">"))
+            messages.filter { it.role != MessageRole.SYSTEM }.forEachIndexed { index, message ->
+                add(UIMessagePart.Text("<message index=\"${index + 1}\" role=\"${message.role.name.lowercase()}\">"))
+                // 工具调用作为已发生的记录，避免被 API 当成本轮待执行的调用。
+                addAll(listOf(message).withToolHistoryAsText().single().parts.map { part ->
+                    if (part is UIMessagePart.Reasoning) {
+                        UIMessagePart.Text("<reasoning>\n${part.reasoning}\n</reasoning>")
+                    } else part
+                })
+                add(UIMessagePart.Text("</message>"))
+            }
+            add(UIMessagePart.Text("</conversation_history>"))
+        },
         isSynthetic = true,
     )
-    return listOf(system) + filter { it.role != MessageRole.SYSTEM }
+    return buildList {
+        // Claude 和 Google 只读取第一条系统信息，将选中的系统内容合并。
+        val parts = if (role == CompressionPromptRole.SYSTEM) systemParts + UIMessagePart.Text(prompt) else systemParts
+        if (parts.isNotEmpty()) add(UIMessage.system("").copy(parts = parts, isSynthetic = true))
+        add(history)
+        if (role == CompressionPromptRole.USER) add(UIMessage.user(prompt).copy(isSynthetic = true))
+    }
 }
 
 @Suppress("DEPRECATION")
@@ -355,6 +385,19 @@ internal fun List<UIMessage>.withToolHistoryAsText(): List<UIMessage> = map { me
             }
         },
     )
+}
+
+/** Wrap request copies after transformers so templates cannot rewrite the boundaries. */
+internal fun List<UIMessage>.withExistingSummaryMarkers(): List<UIMessage> {
+    var index = 0
+    return map { message ->
+        if (!message.isContextCheckpoint) return@map message
+        index++
+        message.copy(
+            parts = listOf(UIMessagePart.Text("<existing_summary index=\"$index\">")) +
+                message.parts + UIMessagePart.Text("</existing_summary>"),
+        )
+    }
 }
 
 private const val CONTINUATION_HINT =

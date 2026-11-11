@@ -54,7 +54,6 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import kotlin.math.roundToInt
 import kotlin.uuid.Uuid
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.datastore.Settings
@@ -316,14 +315,9 @@ private fun ChatListNormal(
         }
 
         // 判断最近是否滚动
-        LaunchedEffect(state.isScrollInProgress) {
-            if (state.isScrollInProgress) {
-                isRecentScroll = true
-                delay(1500)
-                isRecentScroll = false
-            } else {
-                delay(1500)
-                isRecentScroll = false
+        LaunchedEffect(state) {
+            observeRecentScroll(snapshotFlow { state.isScrollInProgress }) {
+                isRecentScroll = it
             }
         }
 

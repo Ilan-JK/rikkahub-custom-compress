@@ -1,6 +1,6 @@
 # Custom APK build information
 
-Modified by Ilan-JK, 2026-11-11, under the root AGPL-3.0 license.
+Modified by Ilan-JK, 2026-11-12, under the root AGPL-3.0 license.
 
 The 3.2.0 ARM64 APK corresponds to the source commit selected by its release tag. The earlier 3.1.2 APK used source snapshot `b24477c2b9bb5b1da3ef1b651c47d9f9db0c20ff`; its historical release and attached source materials remain available.
 
@@ -33,7 +33,7 @@ The 3.2.0 build used cached dependencies, existing generated baseline/startup pr
 
 ## Native component sources
 
-The `3.2.0-custom-compress-2` APK is 16,334,739 bytes, SHA-256 `ebb74bb0b3ac4e0e2522e143e0800453c9513438f1d5de8d4d1351a6ab47f1ae`. The prebuilt native components below are inherited from upstream. Historical source archives remain attached to [the 3.1.2 release](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/tag/v3.1.2-custom-compress-1) for continued inspection and rebuilding:
+The `3.2.0-custom-compress-3` APK is 16,323,663 bytes, SHA-256 `f249eb6e258705f5fa1f7651eed47271270f4226280e9f1e0c073d196589833b`. The prebuilt native components below are inherited from upstream. Historical source archives remain attached to [the 3.1.2 release](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/tag/v3.1.2-custom-compress-1) for continued inspection and rebuilding:
 
 - PRoot: binary version string `5.1.107.96`; [source commit](https://github.com/termux/proot/tree/a179d3e8a4e045aaa1fb8cc3284f23509d96d353), GPL-2.0-or-later. Upstream RikkaHub [binary-update commit](https://github.com/rikkahub/rikkahub/commit/bf8ff5a27482c7e87cebdc0b0a71cac0dbed7c69).
 - The matching-era Termux package recipe declares talloc 2.4.3 and libandroid-shmem 0.7. Their upstream source archives and the package recipes from [termux-packages de396619](https://github.com/termux/termux-packages/tree/de39661946f7e8175b5dd0755121fa28cb0aebd1/packages) are attached as reference inputs. The precise static-dependency inputs of the upstream binary have not been verified.

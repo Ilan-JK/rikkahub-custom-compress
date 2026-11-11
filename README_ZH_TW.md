@@ -8,9 +8,9 @@
 
 ## 下載
 
-**[下載 ARM64 APK](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/download/3.2.0-custom-compress-2/RikkaHub-3.2.0-custom-compress-2-arm64.apk)** · [版本說明與原始碼資料](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/latest)
+**[下載 ARM64 APK](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/download/3.2.0-custom-compress-3/RikkaHub-3.2.0-custom-compress-3-arm64.apk)** · [版本說明與原始碼資料](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/latest)
 
-版本 `3.2.0-custom-compress-2`，16.33 MB（15.58 MiB），Android 8.0 及以上，ARM64。
+版本 `3.2.0-custom-compress-3`，16.32 MB（15.57 MiB），Android 8.0 及以上，ARM64。
 
 套件名稱為 `me.rerere.rikkahub.debug`，使用獨立簽章，可與官方版並存，不能直接覆蓋官方版。
 
@@ -25,6 +25,10 @@
 
 - 在 **模型設定 → 提示詞 → 壓縮傳送設定** 中，選擇是否包含助手提示詞、模式插入提示詞、世界書、記憶、工具定義與說明、時間提醒、工作區提示及資訊範本，手動與自動壓縮共用設定。
 - 壓縮指令可選擇以使用者請求或系統提示詞傳送，預設保留原有方式。
+- 在 **模型設定 → 模型 → 壓縮歷史模型** 中獨立選擇壓縮模型與思考深度，手動、自動與回合中壓縮共用。升級後請先選擇此模型，壓縮不再沿用目前的對話模型。
+- 壓縮請求明確區分指令、待摘要的歷史資料與舊摘要，減少將壓縮工作誤作續寫的情況；這些標記僅用於壓縮請求。
+- 右上角按鈕直接開啟對話地圖，移除此處的「匯出」與「刪除」。
+- 對話地圖預設隱藏摘要涵蓋的原文，可主動展開；刪除摘要後，對應原文恢復顯示。
 
 ## 為什麼說「恢復」
 
@@ -40,6 +44,6 @@
 
 ## 致謝與授權
 
-基於 [RikkaHub](https://github.com/rikkahub/rikkahub)，感謝 [re-ovo](https://github.com/re-ovo) 及所有上游貢獻者。本社群修改版由 Ilan-JK 維護，修改日期為 2026-11-11。
+基於 [RikkaHub](https://github.com/rikkahub/rikkahub)，感謝 [re-ovo](https://github.com/re-ovo) 及所有上游貢獻者。本社群修改版由 Ilan-JK 維護，修改日期為 2026-11-12。
 
 專案繼續採用 [AGPL-3.0](LICENSE)，保留原有著作權及第三方授權聲明。

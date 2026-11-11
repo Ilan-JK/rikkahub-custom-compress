@@ -140,6 +140,11 @@ private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding:
         providers = settings.providers,
         type = ModelType.CHAT,
     )
+    val compressionModel = rememberModelListState(
+        modelId = settings.compression.modelId,
+        providers = settings.providers,
+        type = ModelType.CHAT,
+    )
     val translateModel = rememberModelListState(
         modelId = settings.translateModeId,
         providers = settings.providers,
@@ -211,6 +216,40 @@ private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding:
             }
         }
         item {
+            CardGroup {
+                formItem(
+                    headlineContent = { Text("压缩历史模型") },
+                    supportingContent = { Text("手动、自动和中途压缩共用") },
+                    leadingContent = {
+                        CardGroupIcon(
+                            HugeIcons.AiEditing,
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    },
+                ) {
+                    ModelField(
+                        model = compressionModel.currentModel,
+                        onClick = { compressionModel.open() },
+                        placeholder = "选择压缩历史模型",
+                    )
+                }
+                item(
+                    headlineContent = { Text(stringResource(R.string.assistant_page_thinking_budget)) },
+                    trailingContent = {
+                        ReasoningButton(
+                            reasoningLevel = settings.compression.reasoningLevel,
+                            onUpdateReasoningLevel = { level ->
+                                vm.updateSettings { latest ->
+                                    latest.copy(compression = latest.compression.copy(reasoningLevel = level))
+                                }
+                            },
+                        )
+                    },
+                )
+            }
+        }
+        item {
             // 没设置时用快速模型，配色和它保持一致
             val containerColor = MaterialTheme.colorScheme.tertiaryContainer
             val contentColor = MaterialTheme.colorScheme.onTertiaryContainer
@@ -274,6 +313,9 @@ private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding:
     }
     ModelListSheet(state = memoryModel) {
         vm.updateSettings { latest -> latest.copy(memoryModelId = it.id) }
+    }
+    ModelListSheet(state = compressionModel) { model ->
+        vm.updateSettings { latest -> latest.copy(compression = latest.compression.copy(modelId = model.id)) }
     }
     ModelListSheet(state = translateModel) {
         vm.updateSettings { latest -> latest.copy(translateModeId = it.id) }

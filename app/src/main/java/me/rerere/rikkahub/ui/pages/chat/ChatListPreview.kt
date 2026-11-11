@@ -21,6 +21,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,12 +51,12 @@ import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.toJavaLocalDateTime
-import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
-import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Attachment01
+import me.rerere.hugeicons.stroke.ArrowDown01
+import me.rerere.hugeicons.stroke.ArrowUp01
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.FavouriteCircle
 import me.rerere.hugeicons.stroke.Image01
@@ -67,7 +68,6 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
-import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.utils.plus
@@ -77,51 +77,6 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
 import kotlin.uuid.Uuid
-
-/**
- * 概览里的一张卡片：一轮对话 = 一条用户消息 + 后面跟着的助手回复（工具调用会拆成多个节点，这里合并）。
- * 对话开头没有用户消息时（如开场白），[user] 为空。
- */
-private data class PreviewRound(
-    // 这一轮第一个节点的 id，用作列表 key
-    val id: Uuid,
-    // 点击跳转的目标，取这一轮第一个节点
-    val firstIndex: Int,
-    val lastIndex: Int,
-    val user: UIMessage?,
-    val reply: UIMessage?,
-    // 去掉 Markdown 标记、折叠空白后的纯文本，搜索和摘要都用它
-    val userText: String,
-    val replyText: String,
-    val replyParts: List<UIMessagePart>,
-    val favorite: Boolean,
-) {
-    fun matches(query: String): Boolean =
-        userText.contains(query, ignoreCase = true) || replyText.contains(query, ignoreCase = true)
-}
-
-private fun List<MessageNode>.toPreviewRounds(): List<PreviewRound> {
-    val groups = mutableListOf<MutableList<IndexedValue<MessageNode>>>()
-    forEachIndexed { index, node ->
-        if (node.currentMessage.role == MessageRole.USER || groups.isEmpty()) groups.add(mutableListOf())
-        groups.last().add(IndexedValue(index, node))
-    }
-    return groups.map { group ->
-        val user = group.first().value.currentMessage.takeIf { it.role == MessageRole.USER }
-        val replies = group.map { it.value.currentMessage }.filter { it.role != MessageRole.USER }
-        PreviewRound(
-            id = group.first().value.id,
-            firstIndex = group.first().index,
-            lastIndex = group.last().index,
-            user = user,
-            reply = replies.lastOrNull(),
-            userText = user?.toPreviewText().orEmpty(),
-            replyText = replies.map { it.toPreviewText() }.filter { it.isNotEmpty() }.joinToString(" "),
-            replyParts = replies.flatMap { it.parts },
-            favorite = group.any { it.value.isFavorite },
-        )
-    }
-}
 
 /**
  * 消息概览：聊天页左滑进入，每轮对话一张卡片，点击跳到对应位置。
@@ -149,8 +104,13 @@ internal fun ChatListPreview(
             .collect { value = withContext(Dispatchers.Default) { it.toPreviewRounds() } }
     }
     val rounds = loadedRounds.orEmpty()
-    val filtered = remember(rounds, query) {
-        if (query.isEmpty()) rounds else rounds.filter { it.matches(query) }
+    var expandedCheckpoints by remember(conversation.id) { mutableStateOf(emptySet<Uuid>()) }
+    var revealCheckpoint by remember(conversation.id) { mutableStateOf<Uuid?>(null) }
+    val visibleRounds = remember(rounds, expandedCheckpoints) {
+        rounds.visiblePreviewRounds(expandedCheckpoints)
+    }
+    val filtered = remember(rounds, query, expandedCheckpoints) {
+        rounds.visiblePreviewRounds(expandedCheckpoints, query)
     }
 
     val assistant = remember(settings.assistants, conversation.assistantId) {
@@ -167,12 +127,18 @@ internal fun ChatListPreview(
     val loaded = loadedRounds != null
     LaunchedEffect(loaded) {
         if (!loaded) return@LaunchedEffect
-        val currentRound = rounds.indexOfFirst { currentIndex in it.firstIndex..it.lastIndex }
+        val currentRound = filtered.indexOfFirst { it.represents(currentIndex, expandedCheckpoints) }
         listState.scrollToItem((currentRound - 1).coerceAtLeast(0))
     }
     // 搜索框固定在列表外，滚到中间时改搜索词，结果要从头看
     LaunchedEffect(listState) {
         snapshotFlow { searchQuery.trim() }.drop(1).collect { listState.scrollToItem(0) }
+    }
+    LaunchedEffect(filtered, revealCheckpoint) {
+        val checkpoint = revealCheckpoint ?: return@LaunchedEffect
+        val firstOriginal = filtered.indexOfFirst { it.coveredBy == checkpoint }
+        if (firstOriginal >= 0) listState.scrollToItem(firstOriginal)
+        revealCheckpoint = null
     }
 
     // 搜索框浮在列表上方固定不动；列表顶部留白放进 contentPadding，内容能滚到搜索框和透明标题栏下面并渐隐
@@ -222,7 +188,16 @@ internal fun ChatListPreview(
                     query = query,
                     assistant = assistant,
                     model = reply?.let { it.modelId?.let(modelById::get) ?: it.snapshotModel() },
-                    isCurrent = currentIndex in round.firstIndex..round.lastIndex,
+                    isCurrent = round.represents(currentIndex, expandedCheckpoints),
+                    expanded = round.id in expandedCheckpoints,
+                    onToggleExpanded = {
+                        expandedCheckpoints = if (round.id in expandedCheckpoints) {
+                            expandedCheckpoints - round.id
+                        } else {
+                            revealCheckpoint = round.id
+                            expandedCheckpoints + round.id
+                        }
+                    },
                     onClick = { onJumpToMessage(round.firstIndex) },
                     modifier = Modifier.animateItem(),
                 )
@@ -233,7 +208,7 @@ internal fun ChatListPreview(
             query = searchQuery,
             onQueryChange = { searchQuery = it },
             resultCount = filtered.size,
-            totalCount = rounds.size,
+            totalCount = visibleRounds.size,
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = searchBarTop),
         )
     }
@@ -317,6 +292,8 @@ private fun PreviewRoundCard(
     assistant: Assistant?,
     model: Model?,
     isCurrent: Boolean,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -332,6 +309,13 @@ private fun PreviewRoundCard(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            if (round.isCheckpoint) {
+                Text(
+                    text = "压缩摘要",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.primary,
+                )
+            }
             // 用户消息：一行
             val user = round.user
             if (user != null) {
@@ -388,6 +372,19 @@ private fun PreviewRoundCard(
                             PreviewAttachmentSummary(parts = round.replyParts)
                         }
                     }
+                }
+            }
+            if (round.isCheckpoint && round.coveredStartIndex < round.firstIndex) {
+                TextButton(onClick = onToggleExpanded) {
+                    Icon(
+                        imageVector = if (expanded) HugeIcons.ArrowUp01 else HugeIcons.ArrowDown01,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        text = "${if (expanded) "收起" else "展开"}原文（${round.coveredMessageCount} 条信息）",
+                        modifier = Modifier.padding(start = 6.dp),
+                    )
                 }
             }
         }
@@ -511,20 +508,6 @@ private fun LocalDateTime.toPreviewTimeString(): String {
     }
     return style.withLocale(Locale.getDefault()).format(this)
 }
-
-private val CodeFenceRegex = Regex("```[\\w-]*")
-private val HeadingRegex = Regex("(?m)^\\s{0,3}#{1,6}\\s+")
-private val QuoteRegex = Regex("(?m)^\\s{0,3}>\\s?")
-private val EmphasisRegex = Regex("\\*\\*|__|~~")
-private val WhitespaceRegex = Regex("\\s+")
-
-private fun UIMessage.toPreviewText(): String = toText()
-    .replace(CodeFenceRegex, " ")
-    .replace(HeadingRegex, "")
-    .replace(QuoteRegex, "")
-    .replace(EmphasisRegex, "")
-    .replace(WhitespaceRegex, " ")
-    .trim()
 
 /**
  * 截取包含搜索词的片段：匹配词前保留一小段上下文，保证三行内能看到匹配位置。

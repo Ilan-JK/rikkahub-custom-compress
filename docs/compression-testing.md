@@ -20,7 +20,14 @@ without adding dependencies or changing dependency injection.
 - `MessageContextLimitTest`: latest/all-summary selection, ordering and exclusion of
   covered originals.
 - `CompressionRequestTest`: shared request options, independent mode/lorebook
-  filtering, system-context exclusions and user/system compression instructions.
+  filtering, system-context exclusions, user/system compression instructions,
+  source-material packaging and independent compression-model selection.
+- `ExistingSummaryMarkersTest`: compression-only summary markers and unchanged
+  normal-chat content.
+- `ChatMapEntriesTest`: checkpoint boundaries, default folding, independent
+  expansion, search, source indexes and restoration after deleting summaries.
+- `MessageJumperScrollTest`: visibility during scrolling and its timeout after
+  scrolling stops.
 
 Run `:ai:testDebugUnitTest :app:testGithubDebugUnitTest` with the project's Gradle
 environment. A successful JVM test run does not validate device UI or provider APIs.
@@ -28,6 +35,8 @@ environment. A successful JVM test run does not validate device UI or provider A
 ## Device Acceptance Checks
 
 - Edit and restore both compression prompts under Model Settings / Prompts.
+- Select a separate compression model and reasoning level, restart, and confirm
+  manual, automatic and mid-turn compression use these saved choices.
 - Under Compression Request Settings, toggle each optional input and inspect the
   outgoing request in manual, idle automatic and mid-turn compression.
 - Switch the instruction role between user and system; confirm the full instruction
@@ -44,3 +53,6 @@ environment. A successful JVM test run does not validate device UI or provider A
 - Edit covered content or switch its branch and verify downstream summaries vanish
   while original message nodes and their alternatives remain local.
 - Check narrow screens, large fonts, scrolling, keyboard visibility and cancellation.
+- Open the conversation map directly from the top-right button. Expand each
+  summary's covered originals, search folded content, and verify jump positions
+  and restoration when a summary is deleted.

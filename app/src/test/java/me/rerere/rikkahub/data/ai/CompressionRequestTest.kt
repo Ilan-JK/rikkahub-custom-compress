@@ -25,11 +25,13 @@ class CompressionRequestTest {
     private val assistant = Assistant(systemPrompt = "assistant", enableMemory = true)
 
     @Test
-    fun `default user role preserves request prefix and appends complete instructions`() {
+    fun `user role separates source history from complete editable instructions`() {
         val messages = listOf(UIMessage.system("system"), UIMessage.user("history"))
         val prompt = buildCompressPrompt("extra", "en", true, "main", "mid-turn")
         val result = messages.withCompressionPrompt(prompt, CompressionPromptRole.USER)
-        assertEquals(messages, result.dropLast(1))
+        assertEquals("system", result.first().toText())
+        assertTrue(result[1].toText().startsWith("<conversation_history type=\"source_material\">"))
+        assertTrue(result[1].toText().contains("<message index=\"1\" role=\"user\">\nhistory\n</message>"))
         assertEquals(MessageRole.USER, result.last().role)
         assertEquals("main\n\nmid-turn\n\nextra", result.last().toText())
     }
@@ -42,7 +44,10 @@ class CompressionRequestTest {
         val result = messages.withCompressionPrompt("compress {{literal}}", CompressionPromptRole.SYSTEM)
         assertEquals(1, result.count { it.role == MessageRole.SYSTEM })
         assertEquals("assistant\ninjection\ncompress {{literal}}", result.first().toText())
-        assertEquals(listOf(first, second), result.drop(1))
+        assertEquals(MessageRole.USER, result.last().role)
+        assertTrue(result.last().toText().contains("role=\"user\">\nhistory\n</message>"))
+        assertTrue(result.last().toText().contains("role=\"assistant\">\nreply\n</message>"))
+        assertFalse(result.last().toText().contains("compress {{literal}}"))
         assertEquals(4, messages.size)
     }
 
@@ -52,7 +57,44 @@ class CompressionRequestTest {
         val result = listOf(history).withCompressionPrompt("summary only", CompressionPromptRole.SYSTEM)
         assertEquals(listOf(MessageRole.SYSTEM, MessageRole.USER), result.map { it.role })
         assertEquals("summary only", result.first().toText())
-        assertSame(history, result.last())
+        assertTrue(result.last().toText().contains("\nhistory\n"))
+        assertTrue(result.last().toText().endsWith("</conversation_history>"))
+        assertEquals("history", history.toText())
+    }
+
+    @Test
+    fun `unfinished assistant prose is source material and never an assistant prefill`() {
+        val unfinished = UIMessage.assistant("The evening wind lifted her hair, revealing")
+        val input = listOf(UIMessage.user("Continue the story"), unfinished)
+        for (role in CompressionPromptRole.entries) {
+            val result = input.withCompressionPrompt("Output only a plot summary", role)
+
+            assertEquals(MessageRole.USER, result.last().role)
+            assertFalse(result.any { it.role == MessageRole.ASSISTANT })
+            val source = result.single { it.toText().startsWith("<conversation_history") }.toText()
+            assertTrue(source.contains("role=\"assistant\">\n${unfinished.toText()}\n</message>"))
+            assertTrue(source.endsWith("</conversation_history>"))
+            assertFalse(source.contains("Output only a plot summary"))
+        }
+        assertSame(unfinished, input.last())
+    }
+
+    @Test
+    fun `source history preserves media and tool results without live tool calls`() {
+        val image = UIMessagePart.Image(url = "https://example.com/image.png")
+        val tool = UIMessagePart.Tool("call", "search", "query", listOf(UIMessagePart.Text("found"), image))
+        val reasoning = UIMessagePart.Reasoning("thought")
+        val message = UIMessage.assistant("").copy(parts = listOf(reasoning, tool))
+        val result = listOf(message).withCompressionPrompt("summarize", CompressionPromptRole.SYSTEM)
+        val source = result.last()
+
+        assertEquals(MessageRole.USER, source.role)
+        assertTrue(source.parts.contains(image))
+        assertTrue(source.toText().contains("found"))
+        assertTrue(source.toText().contains("<reasoning>\nthought\n</reasoning>"))
+        assertFalse(source.parts.any { it is UIMessagePart.Tool || it is UIMessagePart.Reasoning })
+        assertSame(reasoning, message.parts.first())
+        assertSame(tool, message.parts.last())
     }
 
     @Test

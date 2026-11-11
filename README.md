@@ -8,9 +8,9 @@ Context-compression customization based on RikkaHub 3.2.0, maintained by Ilan-JK
 
 ## Download
 
-**[Download ARM64 APK](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/download/3.2.0-custom-compress-2/RikkaHub-3.2.0-custom-compress-2-arm64.apk)** · [Release notes and source materials](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/latest)
+**[Download ARM64 APK](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/download/3.2.0-custom-compress-3/RikkaHub-3.2.0-custom-compress-3-arm64.apk)** · [Release notes and source materials](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/latest)
 
-Version `3.2.0-custom-compress-2`, 16.33 MB (15.58 MiB), Android 8.0+, ARM64.
+Version `3.2.0-custom-compress-3`, 16.32 MB (15.57 MiB), Android 8.0+, ARM64.
 
 The package ID is `me.rerere.rikkahub.debug`, with a separate signing certificate, so it installs alongside the official app rather than replacing it.
 
@@ -25,6 +25,10 @@ In **Settings > Model > Prompts > Compress history**, edit and save the entire c
 
 - Under **Model Settings > Prompts > Compression Request Settings**, choose whether to include the assistant prompt, mode injections, lorebooks, memory, tool definitions and instructions, time reminders, workspace instructions and message templates; manual and automatic compression share these settings.
 - Send compression instructions as a user request or system prompt, with the existing behavior retained by default.
+- Choose an independent compression model and reasoning level under **Model Settings > Models > Compression model**, shared by manual, automatic and mid-turn compression. Select this model after upgrading; compression no longer follows the chat model.
+- Compression requests clearly separate instructions, conversation source material and existing summaries to reduce accidental continuation. These markers apply only to compression requests.
+- The top-right conversation-map button opens the map directly; Export and Delete have been removed from that location.
+- The conversation map initially hides originals covered by summaries. Expand a summary's originals explicitly, or delete the summary to reveal its content again.
 
 ## Why Restore It?
 
@@ -40,6 +44,6 @@ Custom compression prompts are an existing RikkaHub feature, not an invention of
 
 ## Credits and License
 
-Based on [RikkaHub](https://github.com/rikkahub/rikkahub), developed by [re-ovo](https://github.com/re-ovo) and its contributors. This community modification is maintained by Ilan-JK, dated 2026-11-11.
+Based on [RikkaHub](https://github.com/rikkahub/rikkahub), developed by [re-ovo](https://github.com/re-ovo) and its contributors. This community modification is maintained by Ilan-JK, dated 2026-11-12.
 
 The project remains under [AGPL-3.0](LICENSE). Existing copyright and third-party license notices are retained.
