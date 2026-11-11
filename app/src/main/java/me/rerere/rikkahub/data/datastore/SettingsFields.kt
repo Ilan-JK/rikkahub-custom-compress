@@ -112,7 +112,11 @@ internal val SETTINGS_FIELDS: List<SettingsField<*, *>> = with(SettingsStore) {
         plain(SUGGESTION_PROMPT, Settings::suggestionPrompt) { copy(suggestionPrompt = it) },
         uuid(OCR_MODEL, Settings::ocrModelId) { copy(ocrModelId = it) },
         plain(OCR_PROMPT, Settings::ocrPrompt) { copy(ocrPrompt = it) },
-        plain(COMPRESS_PROMPT, Settings::compressPrompt) { copy(compressPrompt = it) },
+
+        // 自动压缩
+        plain(ENABLE_AUTO_COMPRESS, Settings::enableAutoCompress) { copy(enableAutoCompress = it) },
+        plain(AUTO_COMPRESS_THRESHOLD, Settings::autoCompressThreshold) { copy(autoCompressThreshold = it) },
+        json(COMPRESSION, Settings::compression) { copy(compression = it) },
 
         // 提供商
         json(PROVIDERS, Settings::providers) { copy(providers = it) },

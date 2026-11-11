@@ -1,8 +1,8 @@
 # Custom APK build information
 
-Modified by Ilan-JK, 2026-11-10, under the root AGPL-3.0 license.
+Modified by Ilan-JK, 2026-11-11, under the root AGPL-3.0 license.
 
-The application source used for the ARM64 APK is the initial source snapshot `b24477c2b9bb5b1da3ef1b651c47d9f9db0c20ff`. Later commits add publication documentation and build support without changing the application Kotlin implementation.
+The 3.2.0 ARM64 APK corresponds to the source commit selected by its release tag. The earlier 3.1.2 APK used source snapshot `b24477c2b9bb5b1da3ef1b651c47d9f9db0c20ff`; its historical release and attached source materials remain available.
 
 ## Toolchain used
 
@@ -20,24 +20,20 @@ Run from the repository root (PowerShell example):
 
 ```powershell
 pnpm --dir web-ui install --frozen-lockfile
-gradle --no-daemon -I tools/custom-apk/local.init.gradle -Prikkahub.localOptimized=true -Pandroid.overridePathCheck=true assembleGithubRelease
+gradle --no-daemon -I tools/custom-apk/local.init.gradle '-Prikkahub.localOptimized=true' '-Pandroid.overridePathCheck=true' assembleGithubRelease
 ```
 
 Outputs are under `app/build/outputs/apk/github/release/`; select the ARM64 file. This builds all ABI splits as configured upstream; it does not make the universal file ARM64-only. Do not run a public build with your personal `google-services.json` in `app/` when using the placeholder configuration.
 
 The init script retains the functional local release overrides: application ID suffix `.debug`, debug signing configuration, optimization enabled, `debuggable=false`, placeholder Firebase resources, collection disabled, and Google Services/Crashlytics upload tasks disabled where applicable. The portable script uses repository-relative resource paths and normal upstream dependency repositories.
 
-The release's `source-and-build-materials.zip` also contains the original init script, localhost dependency-cache helper, and manifest/resources used for the existing APK. They contain no credentials. To recreate their original relative layout, put the source checkout in a directory named `rikkahub-master` and the original support files in its sibling `.build-tools` directory. The cache helper listens only on `127.0.0.1:18765`; keep it running while using the original init script. Configure SDK/JDK/Gradle paths for your machine, then use:
+The historical 3.1.2 release's `source-and-build-materials.zip` also contains its original init script, localhost dependency-cache helper, and manifest/resources. They contain no credentials. Those files document the older build and are not the current application source. The current repository-relative override above uses normal dependency repositories and does not require that cache helper.
 
-```powershell
-gradle --no-daemon -I ../.build-tools/google-repositories.init.gradle -Prikkahub.localOptimized=true -Pandroid.overridePathCheck=true assembleGithubRelease
-```
-
-The original build used cached dependencies, existing generated baseline/startup profiles, R8 and resource optimization. Upstream includes a mutable `sqlite-android` SNAPSHOT dependency. Rebuilt APK bytes, size and signing certificate may therefore differ. General-purpose SDKs, caches and private keys are not included.
+The 3.2.0 build used cached dependencies, existing generated baseline/startup profiles, R8 and resource optimization. The APK embeds its compiled baseline profile; regenerating device-specific profiles is a separate upstream workflow. Upstream includes a mutable `sqlite-android` SNAPSHOT dependency. Rebuilt APK bytes, size, profiles and signing certificate may therefore differ. General-purpose SDKs, caches and private keys are not included.
 
 ## Native component sources
 
-The published APK is the existing, unchanged 16,247,376-byte file, SHA-256 `62111775b9aaa54d1d7a7bd342150700c2174117d0408cd50a4dd681f3fbe580`. Its prebuilt native libraries were inherited from upstream, not compiled by this fork. Source materials are attached alongside the APK for continued inspection and rebuilding:
+The 3.2.0 APK is 16,326,079 bytes, SHA-256 `771b0403bcbf5c9e3b3e174f422a5f87325aafa06a97fabe3cff28ac9b49db13`. The prebuilt native components below are inherited from upstream. Historical source archives remain attached to [the 3.1.2 release](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/tag/v3.1.2-custom-compress-1) for continued inspection and rebuilding:
 
 - PRoot: binary version string `5.1.107.96`; [source commit](https://github.com/termux/proot/tree/a179d3e8a4e045aaa1fb8cc3284f23509d96d353), GPL-2.0-or-later. Upstream RikkaHub [binary-update commit](https://github.com/rikkahub/rikkahub/commit/bf8ff5a27482c7e87cebdc0b0a71cac0dbed7c69).
 - The matching-era Termux package recipe declares talloc 2.4.3 and libandroid-shmem 0.7. Their upstream source archives and the package recipes from [termux-packages de396619](https://github.com/termux/termux-packages/tree/de39661946f7e8175b5dd0755121fa28cb0aebd1/packages) are attached as reference inputs. The precise static-dependency inputs of the upstream binary have not been verified.
@@ -46,4 +42,4 @@ The published APK is the existing, unchanged 16,247,376-byte file, SHA-256 `6211
 - Material color utilities: `material3/material-color-utilities/kotlin/LICENSE` (Apache-2.0).
 - Other runtime libraries: versions in the Gradle catalog and pnpm lockfile; retained embedded license/notice files in the APK.
 
-Full license texts for the attached third-party sources are in their archives. Their licenses continue to apply; they are not replaced by the application's AGPL license. The application's About links in this existing APK still point to upstream; use this repository and the release attachments for this fork's source. A future rebuilt version should expose this fork's source directly in its Android and web interfaces.
+Full license texts for the historical third-party source attachments are in their archives. Their licenses continue to apply; they are not replaced by the application's AGPL license. The Android About page now includes this fork's source link while retaining upstream attribution and license links.

@@ -71,6 +71,11 @@ fun SettingDonatePage() {
                 .fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            Text(
+                text = "本版本由 Ilan-JK 定制，以下赞助入口支持 RikkaHub 原项目。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             DonateMethodsCardGroup()
 
             Text(

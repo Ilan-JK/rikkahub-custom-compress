@@ -45,6 +45,7 @@ import me.rerere.rikkahub.service.BackgroundShellManager
 import me.rerere.rikkahub.service.BackgroundShellTask
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.service.SessionActivity
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.rikkahub.utils.UiState
@@ -81,6 +82,11 @@ class ChatVM(
     val conversationJob: StateFlow<Job?> =
         chatService
             .getGenerationJobStateFlow(_conversationId)
+            .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    val sessionActivity: StateFlow<SessionActivity?> =
+        chatService
+            .getActivityFlow(_conversationId)
             .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     val processingStatus: StateFlow<String?> =
@@ -253,9 +259,9 @@ class ChatVM(
         }
     }
 
-    fun handleCompressContext(additionalPrompt: String, keepRecentMessages: Int): Job {
+    fun handleCompressContext(additionalPrompt: String, range: me.rerere.rikkahub.data.datastore.CompressionRange): Job {
         return viewModelScope.launch {
-            chatService.compressConversation(_conversationId, additionalPrompt, keepRecentMessages).onFailure {
+            chatService.compressConversation(_conversationId, additionalPrompt, range).onFailure {
                 chatService.addError(it, title = context.getString(R.string.error_title_compress_conversation))
             }
         }

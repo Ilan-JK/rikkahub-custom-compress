@@ -36,15 +36,15 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.Heading
 import me.rerere.hugeicons.stroke.Idea01
-import me.rerere.hugeicons.stroke.Package01
 import me.rerere.hugeicons.stroke.ScanText
 import me.rerere.hugeicons.stroke.Translate
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_OCR_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_SUGGESTION_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TITLE_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TRANSLATION_PROMPT
+import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
+import me.rerere.rikkahub.data.ai.prompts.DEFAULT_MID_TURN_COMPRESS_PROMPT
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
@@ -107,8 +107,8 @@ internal fun PromptSettingsPage(settings: Settings, vm: SettingVM, contentPaddin
 
     editing?.let { slot ->
         PromptEditSheet(
-            title = stringResource(slot.title),
-            description = stringResource(slot.variables),
+            title = slot.customTitle ?: stringResource(slot.title),
+            description = if (slot.customTitle != null) "{{locale}}：默认语言" else stringResource(slot.variables),
             value = slot.get(settings),
             onValueChange = { value -> vm.updateSettings { latest -> slot.set(latest, value) } },
             onReset = { vm.updateSettings { latest -> slot.set(latest, slot.default) } },
@@ -126,7 +126,26 @@ private enum class PromptSlot(
     val default: String,
     val get: (Settings) -> String,
     val set: (Settings, String) -> Settings,
+    val customTitle: String? = null,
 ) {
+    COMPRESSION(
+        icon = HugeIcons.Heading,
+        title = R.string.chat_page_compress_context_title,
+        variables = R.string.setting_model_page_suggestion_prompt_vars,
+        default = DEFAULT_COMPRESS_PROMPT,
+        get = { it.compression.prompt },
+        set = { settings, value -> settings.copy(compression = settings.compression.copy(prompt = value)) },
+        customTitle = "压缩历史提示词",
+    ),
+    MID_TURN_COMPRESSION(
+        icon = HugeIcons.Heading,
+        title = R.string.chat_page_compress_context_title,
+        variables = R.string.setting_model_page_suggestion_prompt_vars,
+        default = DEFAULT_MID_TURN_COMPRESS_PROMPT,
+        get = { it.compression.midTurnPrompt },
+        set = { settings, value -> settings.copy(compression = settings.compression.copy(midTurnPrompt = value)) },
+        customTitle = "中途压缩附加提示词",
+    ),
     TRANSLATION(
         icon = HugeIcons.Translate,
         title = R.string.setting_model_page_prompt_translation,
@@ -159,14 +178,6 @@ private enum class PromptSlot(
         get = { it.ocrPrompt },
         set = { settings, value -> settings.copy(ocrPrompt = value) },
     ),
-    COMPRESS(
-        icon = HugeIcons.Package01,
-        title = R.string.chat_page_compress_context,
-        variables = R.string.setting_model_page_compress_prompt_vars,
-        default = DEFAULT_COMPRESS_PROMPT,
-        get = { it.compressPrompt },
-        set = { settings, value -> settings.copy(compressPrompt = value) },
-    ),
 }
 
 private val Whitespace = Regex("\\s+")
@@ -183,7 +194,7 @@ private fun CardGroupScope.promptItem(
     leadingContent = {
         CardGroupIcon(slot.icon, containerColor = iconContainerColor, contentColor = iconContentColor)
     },
-    headlineContent = { Text(stringResource(slot.title)) },
+    headlineContent = { Text(slot.customTitle ?: stringResource(slot.title)) },
     supportingContent = {
         val prompt = slot.get(settings)
         Text(

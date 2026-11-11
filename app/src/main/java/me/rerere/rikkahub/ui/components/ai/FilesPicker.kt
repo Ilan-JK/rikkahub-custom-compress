@@ -109,7 +109,7 @@ internal fun FilesPicker(
     chatModel: Model?,
     state: ChatInputState,
     mcpManager: McpManager,
-    onCompressContext: (additionalPrompt: String, keepRecentMessages: Int) -> Job,
+    onCompressContext: (additionalPrompt: String, range: me.rerere.rikkahub.data.datastore.CompressionRange) -> Job,
     onUpdateAssistant: (Assistant) -> Unit,
     onUpdateWorkspaceCwd: (String?) -> Unit,
     onUpdateSearchMode: (SearchMode) -> Unit,

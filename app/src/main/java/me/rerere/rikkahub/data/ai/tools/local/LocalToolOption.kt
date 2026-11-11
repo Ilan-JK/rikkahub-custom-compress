@@ -31,9 +31,14 @@ sealed class LocalToolOption {
 
     @Serializable
     @SerialName("calendar")
+    // Kept only to deserialize older backups; this build does not expose calendar tools.
     data object Calendar : LocalToolOption()
 
     @Serializable
     @SerialName("chart_display")
     data object ChartDisplay : LocalToolOption()
+
+    @Serializable
+    @SerialName("phone_use")
+    data object PhoneUse : LocalToolOption()
 }

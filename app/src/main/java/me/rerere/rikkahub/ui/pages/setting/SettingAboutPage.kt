@@ -38,6 +38,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.center
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toOffset
@@ -171,6 +172,12 @@ fun SettingAboutPage() {
                                 fontWeight = FontWeight.Black,
                             ),
                         )
+                        Text(
+                            text = "基于 RikkaHub 的 Ilan-JK 定制版，主要调整上下文压缩功能。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
                     }
                 }
 
@@ -204,6 +211,12 @@ fun SettingAboutPage() {
                     val contentColor = MaterialTheme.colorScheme.onTertiaryContainer
                     CardGroup {
                         item(
+                            onClick = { context.openUrl("https://github.com/Ilan-JK/rikkahub-custom-compress") },
+                            leadingContent = { CardGroupIcon(HugeIcons.Github, containerColor = containerColor, contentColor = contentColor) },
+                            supportingContent = { Text("Ilan-JK/rikkahub-custom-compress") },
+                            headlineContent = { Text("改版源码") },
+                        )
+                        item(
                             onClick = { context.openUrl("https://rikka-ai.com/") },
                             leadingContent = { CardGroupIcon(HugeIcons.Earth, containerColor = containerColor, contentColor = contentColor) },
                             supportingContent = { Text("https://rikka-ai.com") },
@@ -213,7 +226,7 @@ fun SettingAboutPage() {
                             onClick = { context.openUrl("https://github.com/rikkahub/rikkahub") },
                             leadingContent = { CardGroupIcon(HugeIcons.Github, containerColor = containerColor, contentColor = contentColor) },
                             supportingContent = { Text("https://github.com/rikkahub/rikkahub") },
-                            headlineContent = { Text(stringResource(R.string.about_page_github)) },
+                            headlineContent = { Text("原项目源码") },
                         )
                         item(
                             onClick = { context.openUrl("https://github.com/rikkahub/rikkahub/blob/master/LICENSE") },

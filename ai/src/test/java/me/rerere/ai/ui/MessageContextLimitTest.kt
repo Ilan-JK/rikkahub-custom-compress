@@ -7,6 +7,27 @@ import org.junit.Test
 
 class MessageContextLimitTest {
     @Test
+    fun `three compression cycles keep only the requested summaries and new messages`() {
+        val summaryA = UIMessage.user("A").copy(isContextCheckpoint = true)
+        val summaryB = UIMessage.user("B").copy(isContextCheckpoint = true)
+        val summaryC = UIMessage.user("C").copy(isContextCheckpoint = true)
+        val first = listOf(UIMessage.user("old"), summaryA, UIMessage.user("new1"))
+        val second = first + summaryB + UIMessage.user("new2")
+        val third = second + summaryC + UIMessage.user("new3")
+        assertEquals(listOf("A", "new1"), first.limitContext(0).map { it.toText() })
+        assertEquals(listOf("B", "new2"), second.limitContext(0).map { it.toText() })
+        assertEquals(listOf("A", "B", "new2"), second.limitContext(0, ContextSummaryMode.ALL).map { it.toText() })
+        assertEquals(listOf("C", "new3"), third.limitContext(0).map { it.toText() })
+        assertEquals(listOf("A", "B", "C", "new3"), third.limitContext(0, ContextSummaryMode.ALL).map { it.toText() })
+    }
+    @Test
+    fun `all summaries exclude covered originals and preserve ordering`() {
+        val messages = createTestMessages(10).withCheckpointsAt(2, 6)
+        assertEquals(listOf(messages[2]) + messages.subList(6, 10), messages.limitContext(0, ContextSummaryMode.ALL))
+        assertEquals(messages.subList(6, 10), messages.limitContext(0, ContextSummaryMode.LATEST))
+        assertEquals(listOf(messages[2], messages[6], messages[9]), messages.limitContext(1, ContextSummaryMode.ALL))
+    }
+    @Test
     fun `limitContext with limit 0 should return original list`() {
         val messages = createTestMessages(5)
         assertEquals(messages, messages.limitContext(0))

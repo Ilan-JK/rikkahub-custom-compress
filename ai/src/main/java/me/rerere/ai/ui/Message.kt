@@ -34,7 +34,7 @@ data class UIMessage(
     // 这条消息累计请求了多少次模型（多轮工具调用共用同一条消息）
     val stepCount: Int? = null,
     val translation: String? = null,
-    // 压缩检查点：此消息是它之前全部历史的摘要，组装请求时从最后一个检查点开始取
+    // 压缩检查点：覆盖此前原文，请求按读取模式保留最新或全部摘要
     val isContextCheckpoint: Boolean = false,
     // 请求期间生成的内部消息；该标记仅在内存中使用
     @Transient
@@ -192,10 +192,20 @@ private const val CONTEXT_KEEP_RATIO = 0.5f
  *
  * @param limit 触发截断的消息条数上限, 小于等于 0 表示不限制
  */
-fun List<UIMessage>.limitContext(limit: Int): List<UIMessage> {
+@Serializable
+enum class ContextSummaryMode { LATEST, ALL }
+
+fun List<UIMessage>.limitContext(
+    limit: Int,
+    summaryMode: ContextSummaryMode = ContextSummaryMode.LATEST,
+): List<UIMessage> {
     val checkpointIndex = indexOfLast { it.isContextCheckpoint }
     if (checkpointIndex < 0) return limitMessageCount(limit)
-    return listOf(this[checkpointIndex]) + subList(checkpointIndex + 1, size).limitMessageCount(limit)
+    val summaries = when (summaryMode) {
+        ContextSummaryMode.LATEST -> listOf(this[checkpointIndex])
+        ContextSummaryMode.ALL -> take(checkpointIndex + 1).filter { it.isContextCheckpoint }
+    }
+    return summaries + subList(checkpointIndex + 1, size).limitMessageCount(limit)
 }
 
 /**

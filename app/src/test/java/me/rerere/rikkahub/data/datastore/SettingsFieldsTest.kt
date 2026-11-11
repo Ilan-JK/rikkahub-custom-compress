@@ -8,7 +8,6 @@ import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.asr.ASRProviderSetting
 import me.rerere.mediagen.provider.MediaGenerationProviderSetting
-import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Lorebook
@@ -56,8 +55,8 @@ class SettingsFieldsTest {
         assertEquals(false, stored["dynamic_color"])
         assertEquals(9090, stored["web_server_port"])
         assertEquals(1.5f, stored["default_tts_playback_speed"])
+        assertEquals(0.9f, stored["auto_compress_threshold"])
         assertEquals("title", stored["title_prompt"])
-        assertEquals("compress", stored["compress_prompt"])
         assertEquals("00000000-0000-0000-0000-000000000001", stored["chat_model"])
         assertEquals("LOW", stored["fast_model_reasoning_level"])
         assertEquals("""[{"id":"00000000-0000-0000-0000-000000000007","name":"tag"}]""", stored["assistant_tags"])
@@ -78,7 +77,6 @@ class SettingsFieldsTest {
         assertEquals(null, settings.memoryModelId)
         assertEquals(true, settings.dynamicColor)
         assertEquals(8080, settings.webServerPort)
-        assertEquals(DEFAULT_COMPRESS_PROMPT, settings.compressPrompt)
     }
 
     @Test
@@ -109,20 +107,6 @@ class SettingsFieldsTest {
         assertEquals("changed", preferences[SettingsStore.THEME_ID])
         assertEquals("on disk", preferences[SettingsStore.TITLE_PROMPT])
     }
-
-    @Test
-    fun `compression prompt can be cleared and reset to its default`() {
-        val preferences = mutablePreferencesOf().apply { putSettings(SAMPLE) }
-        val cleared = SAMPLE.copy(compressPrompt = "")
-
-        preferences.putSettings(cleared, persisted = SAMPLE)
-
-        assertEquals("", preferences.toSettings().compressPrompt)
-
-        preferences.putSettings(cleared.copy(compressPrompt = DEFAULT_COMPRESS_PROMPT), persisted = cleared)
-
-        assertEquals(DEFAULT_COMPRESS_PROMPT, preferences.toSettings().compressPrompt)
-    }
 }
 
 private fun id(n: Int) = Uuid.parse("00000000-0000-0000-0000-%012d".format(n))
@@ -152,7 +136,15 @@ private val SAMPLE = Settings(
     suggestionPrompt = "suggestion",
     ocrModelId = id(5),
     ocrPrompt = "ocr",
-    compressPrompt = "compress",
+    enableAutoCompress = true,
+    autoCompressThreshold = 0.9f,
+    compression = CompressionSettings(
+        prompt = "compress", midTurnPrompt = "resume",
+        manualRange = CompressionRange(CompressionRangeMode.EARLIEST, 12, 8),
+        automaticRange = CompressionRange(CompressionRangeMode.KEEP_RECENT, 16, 10),
+        trigger = AutoCompressionTrigger.MESSAGE_COUNT, messageThreshold = 60,
+        summaryMode = me.rerere.ai.ui.ContextSummaryMode.ALL,
+    ),
     assistantId = id(20),
     providers = listOf(ProviderSetting.OpenAI(id = id(31), name = "Provider")),
     assistants = listOf(Assistant(id = id(20), name = "Assistant")),
@@ -209,7 +201,9 @@ private val STORED_KEYS = setOf(
     "suggestion_prompt",
     "ocr_model",
     "ocr_prompt",
-    "compress_prompt",
+    "enable_auto_compress",
+    "auto_compress_threshold",
+    "compression",
     "providers",
     "select_assistant",
     "assistants",

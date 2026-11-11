@@ -8,7 +8,6 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.asr.ASRProviderSetting
 import me.rerere.mediagen.provider.MediaGenerationProviderSetting
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
-import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_OCR_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_SUGGESTION_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TITLE_PROMPT
@@ -54,9 +53,12 @@ data class Settings(
     val translateTargetLanguage: String = "zh-CN",
     val enableSuggestion: Boolean = true,
     val suggestionPrompt: String = DEFAULT_SUGGESTION_PROMPT,
+    // 自动压缩开关和 Token 比例阈值；触发方式与压缩范围见 compression
+    val enableAutoCompress: Boolean = false,
+    val autoCompressThreshold: Float = 0.8f,
+    val compression: CompressionSettings = CompressionSettings(),
     val ocrModelId: Uuid = Uuid.random(),
     val ocrPrompt: String = DEFAULT_OCR_PROMPT,
-    val compressPrompt: String = DEFAULT_COMPRESS_PROMPT,
     val assistantId: Uuid = DEFAULT_ASSISTANT_ID,
     val providers: List<ProviderSetting> = DEFAULT_PROVIDERS,
     val assistants: List<Assistant> = DEFAULT_ASSISTANTS,

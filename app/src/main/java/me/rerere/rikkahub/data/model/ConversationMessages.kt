@@ -21,7 +21,12 @@ internal fun Conversation.deleteMessage(messageId: Uuid): Conversation? {
         if (nextMessages.isEmpty()) return@mapIndexedNotNull null
         node.copy(messages = nextMessages, selectIndex = node.selectIndex.coerceAtMost(nextMessages.lastIndex))
     }
-    return copy(messageNodes = updatedNodes)
+    val updated = copy(messageNodes = updatedNodes)
+    return if (messageNodes[targetNodeIndex].currentMessage.id == messageId) {
+        updated.withoutCheckpointsAfter(targetNodeIndex - 1)
+    } else {
+        updated
+    }
 }
 
 /**
@@ -42,7 +47,7 @@ internal fun Conversation.editMessage(messageId: Uuid, parts: List<UIMessagePart
             modelSnapshot = original.modelSnapshot,
         )
     }
-    return upsertMessage(node.id, edited)
+    return upsertMessage(node.id, edited).withoutCheckpointsAfter(messageNodes.indexOf(node))
 }
 
 /** 设置消息的翻译，[translation] 为 null 时清除；消息不存在时原样返回 */
@@ -52,10 +57,21 @@ internal fun Conversation.withTranslation(messageId: Uuid, translation: String?)
 }
 
 /** 切换节点选中的分支，调用方负责校验节点和下标 */
-internal fun Conversation.selectBranch(nodeId: Uuid, selectIndex: Int): Conversation = copy(
-    messageNodes = messageNodes.map { node ->
-        if (node.id == nodeId) node.copy(selectIndex = selectIndex) else node
-    }
+internal fun Conversation.selectBranch(nodeId: Uuid, selectIndex: Int): Conversation {
+    val index = messageNodes.indexOfFirst { it.id == nodeId }
+    if (index < 0 || messageNodes[index].selectIndex == selectIndex) return this
+    return copy(
+        messageNodes = messageNodes.map { node ->
+            if (node.id == nodeId) node.copy(selectIndex = selectIndex) else node
+        }
+    ).withoutCheckpointsAfter(index)
+}
+
+/** Later summaries describe the old branch/content; reveal local originals instead of sending stale summaries. */
+private fun Conversation.withoutCheckpointsAfter(index: Int): Conversation = copy(
+    messageNodes = messageNodes.filterIndexed { position, node ->
+        position <= index || !node.currentMessage.isContextCheckpoint
+    },
 )
 
 internal fun Conversation.withNodeFavorite(nodeId: Uuid, favorite: Boolean): Conversation = copy(

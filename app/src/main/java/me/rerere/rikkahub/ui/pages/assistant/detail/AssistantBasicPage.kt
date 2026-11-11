@@ -403,6 +403,11 @@ internal fun AssistantBasicContent(
 
                 if (assistant.contextMessageLimit > 0) {
                     Text(
+                        text = "已启用上下文信息数量限制，此助手的手动和自动摘要压缩不可用。设为 0 后可使用摘要压缩。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Text(
                         text = stringResource(R.string.assistant_page_context_message_limit_warning),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
