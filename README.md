@@ -8,9 +8,9 @@ Context-compression customization based on RikkaHub 3.2.0, maintained by Ilan-JK
 
 ## Download
 
-**[Download ARM64 APK](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/download/3.2.0-custom-compress-1/RikkaHub-3.2.0-custom-compress-arm64-optimized.apk)** · [Release notes and source materials](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/latest)
+**[Download ARM64 APK](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/download/3.2.0-custom-compress-2/RikkaHub-3.2.0-custom-compress-2-arm64.apk)** · [Release notes and source materials](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/latest)
 
-Version `3.2.0-custom-compress-1`, 16.33 MB (15.57 MiB), Android 8.0+, ARM64.
+Version `3.2.0-custom-compress-2`, 16.33 MB (15.58 MiB), Android 8.0+, ARM64.
 
 The package ID is `me.rerere.rikkahub.debug`, with a separate signing certificate, so it installs alongside the official app rather than replacing it.
 
@@ -23,13 +23,8 @@ In **Settings > Model > Prompts > Compress history**, edit and save the entire c
 - Read only the latest summary or all summaries together; covered originals remain local and are excluded from requests.
 - Editable and resettable full and mid-turn compression prompts, shared by manual and automatic compression.
 
-## New on Main
-
-These changes are available in the source. The current download still points to `3.2.0-custom-compress-1`.
-
 - Under **Model Settings > Prompts > Compression Request Settings**, choose whether to include the assistant prompt, mode injections, lorebooks, memory, tool definitions and instructions, time reminders, workspace instructions and message templates; manual and automatic compression share these settings.
 - Send compression instructions as a user request or system prompt, with the existing behavior retained by default.
-- Shorten the two Chinese editor labels to “压缩历史” and “中途压缩附加”.
 
 ## Why Restore It?
 

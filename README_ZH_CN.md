@@ -8,9 +8,9 @@
 
 ## 下载
 
-**[下载 ARM64 APK](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/download/3.2.0-custom-compress-1/RikkaHub-3.2.0-custom-compress-arm64-optimized.apk)** · [版本说明与源码资料](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/latest)
+**[下载 ARM64 APK](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/download/3.2.0-custom-compress-2/RikkaHub-3.2.0-custom-compress-2-arm64.apk)** · [版本说明与源码资料](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/latest)
 
-版本 `3.2.0-custom-compress-1`，16.33 MB（15.57 MiB），Android 8.0 及以上，ARM64。
+版本 `3.2.0-custom-compress-2`，16.33 MB（15.58 MiB），Android 8.0 及以上，ARM64。
 
 包名为 `me.rerere.rikkahub.debug`，使用独立签名，可与官方版并存，不能直接覆盖官方版。
 
@@ -23,13 +23,8 @@
 - 支持“仅读最新摘要”与“多个摘要共同读取”；已压缩原文保留在本地，但不再发送。
 - 完整压缩提示词与中途压缩提示词可编辑、保存和恢复默认，手动和自动压缩共用设置。
 
-## 主分支新增
-
-以下更新已加入源码，当前下载链接仍对应 `3.2.0-custom-compress-1`。
-
 - 在 **模型设置 → 提示词 → 压缩发送配置** 中，选择是否包含助手提示词、模式插入提示词、世界书、记忆、工具定义与说明、时间提醒、工作区提示及信息模板，手动和自动压缩共用配置。
 - 压缩指令可选择作为“用户请求”或“系统提示词”发送，默认保留原有发送方式。
-- 两项编辑入口简化为“压缩历史”和“中途压缩附加”。
 
 ## 为什么说“恢复”
 
