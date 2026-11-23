@@ -13,7 +13,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -33,6 +36,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowUp01
 import me.rerere.hugeicons.stroke.Package01
+import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 
@@ -46,6 +50,7 @@ fun ChatMessageContextCheckpoint(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
+    onViewRequest: (() -> Unit)? = null,
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
 
@@ -107,14 +112,21 @@ fun ChatMessageContextCheckpoint(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.End,
                     ) {
-                        TextButton(onClick = onEdit) {
-                            Text(stringResource(R.string.edit))
-                        }
-                        TextButton(onClick = onDelete) {
-                            Text(
-                                text = stringResource(R.string.delete),
-                                color = MaterialTheme.colorScheme.error,
-                            )
+                        androidx.compose.foundation.layout.Box {
+                            var menu by rememberSaveable { mutableStateOf(false) }
+                            IconButton(onClick = { menu = true }) {
+                                Icon(HugeIcons.MoreVertical, stringResource(R.string.more_options))
+                            }
+                            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                if (onViewRequest != null) DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.compression_view_request)) },
+                                    onClick = { menu = false; onViewRequest() },
+                                )
+                                DropdownMenuItem(text = { Text(stringResource(R.string.edit)) },
+                                    onClick = { menu = false; onEdit() })
+                                DropdownMenuItem(text = { Text(stringResource(R.string.delete)) },
+                                    onClick = { menu = false; onDelete() })
+                            }
                         }
                     }
                 }

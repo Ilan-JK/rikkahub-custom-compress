@@ -263,6 +263,7 @@ fun ChatMessageActionsSheet(
     onShare: () -> Unit,
     onFork: () -> Unit,
     onSelectAndCopy: () -> Unit,
+    onViewRequest: (() -> Unit)? = null,
     isFavorite: Boolean = false,
     onToggleFavorite: (() -> Unit)? = null,
     onWebViewPreview: () -> Unit,
@@ -276,6 +277,9 @@ fun ChatMessageActionsSheet(
         val hasTextContent = message.parts.filterIsInstance<UIMessagePart.Text>()
             .any { it.text.isNotBlank() }
         val actions = buildList {
+            if (onViewRequest != null) {
+                add(MessageSheetAction(HugeIcons.WebDesign01, stringResource(R.string.compression_view_request), onClick = onViewRequest))
+            }
             add(MessageSheetAction(HugeIcons.TextSelection, stringResource(R.string.select_and_copy), onClick = onSelectAndCopy))
             if (hasTextContent) {
                 add(MessageSheetAction(HugeIcons.WebDesign01, stringResource(R.string.render_with_webview), onClick = onWebViewPreview))

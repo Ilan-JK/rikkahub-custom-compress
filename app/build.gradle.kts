@@ -14,6 +14,8 @@ plugins {
     alias(libs.plugins.baselineprofile)
 }
 
+val localArm64 = providers.gradleProperty("rikkahub.localOptimized").orNull == "true"
+
 android {
     namespace = "me.rerere.rikkahub"
     compileSdk {
@@ -26,13 +28,13 @@ android {
         applicationId = "me.rerere.rikkahub"
         minSdk = 26
         targetSdk = 37
-        versionCode = 196
-        versionName = "3.2.0"
+        versionCode = 203
+        versionName = "3.3.1-custom-compress.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
+            abiFilters += if (localArm64) listOf("arm64-v8a") else listOf("arm64-v8a", "x86_64")
         }
     }
 
@@ -41,10 +43,10 @@ android {
             // AppBundle tasks usually contain "bundle" in their name
             //noinspection WrongGradleMethod
             val isBuildingBundle = gradle.startParameter.taskNames.any { it.lowercase().contains("bundle") }
-            isEnable = !isBuildingBundle
+            isEnable = !localArm64 && !isBuildingBundle
             reset()
-            include("arm64-v8a", "x86_64")
-            isUniversalApk = true
+            if (!localArm64) include("arm64-v8a", "x86_64")
+            isUniversalApk = !localArm64
         }
     }
 

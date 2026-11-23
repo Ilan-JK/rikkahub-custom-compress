@@ -5,6 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -50,6 +52,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import me.rerere.ui.components.RikkaConfirmDialog
 import me.rerere.ui.toast.ToastType
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
@@ -298,6 +301,7 @@ private fun ChatPageContent(
 
     var previewMode by rememberSaveable { mutableStateOf(false) }
     val selectionState = rememberChatSelectionState()
+    var showDeleteConfirm by remember { mutableStateOf(false) }
     val hazeState = rememberHazeState()
     var showFilesSheet by remember { mutableStateOf(false) }
     val attachmentPickerActions = rememberChatAttachmentPickerActions(
@@ -508,6 +512,22 @@ private fun ChatPageContent(
             )
         }
 
+        RikkaConfirmDialog(
+            show = showDeleteConfirm,
+            title = stringResource(R.string.confirm_delete),
+            confirmText = stringResource(R.string.delete),
+            dismissText = stringResource(R.string.cancel),
+            onConfirm = {
+                showDeleteConfirm = false
+                scope.launch {
+                    vm.deleteConversation(conversation).join()
+                    navigateToChatPage(navController)
+                }
+            },
+            onDismiss = { showDeleteConfirm = false },
+            text = { Text(stringResource(R.string.chat_page_delete_conversation_confirm)) },
+        )
+
         if (showFilesSheet) {
             ChatFilesPickerSheet(
                 inputState = inputState,
@@ -684,10 +704,7 @@ private fun TopBar(
                 ) {
                     Icon(HugeIcons.MessageAdd01, "New Message")
                 }
-                IconButton(
-                    enabled = conversation.messageNodes.isNotEmpty(),
-                    onClick = onShowOverview,
-                ) {
+                IconButton(enabled = conversation.messageNodes.isNotEmpty(), onClick = onShowOverview) {
                     Icon(HugeIcons.LeftToRightListBullet, stringResource(R.string.chat_page_conversation_map))
                 }
             }
@@ -730,3 +747,4 @@ private fun TopBar(
         )
     }
 }
+

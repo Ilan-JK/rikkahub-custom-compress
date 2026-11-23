@@ -9,11 +9,10 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -22,13 +21,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -41,6 +38,8 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.DisplaySetting
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.ConnectedChoiceButtons
+import me.rerere.rikkahub.ui.components.ui.ConnectedChoiceLabel
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionNotification
 import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
@@ -50,15 +49,16 @@ import me.rerere.rikkahub.utils.plus
 import me.rerere.rikkahub.utils.toLocalDateTime
 import org.koin.androidx.compose.koinViewModel
 
+private const val PAUSE_UPDATE_INDEFINITELY = -1
+private val UPDATE_PAUSE_DAY_OPTIONS = listOf(7, PAUSE_UPDATE_INDEFINITELY)
 private const val MILLIS_PER_DAY = 24 * 60 * 60 * 1_000L
 
 @Composable
 fun SettingPreferencesNotificationPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     var displaySetting by remember(settings) { mutableStateOf(settings.displaySetting) }
-    var showUpdatePauseDialog by rememberSaveable { mutableStateOf(false) }
-    var updatePauseDaysInput by rememberSaveable { mutableStateOf("7") }
-    val updatePauseDays = updatePauseDaysInput.toIntOrNull()?.takeIf { it > 0 }
+    var showUpdatePauseDialog by remember { mutableStateOf(false) }
+    var selectedUpdatePauseDays by remember { mutableStateOf(UPDATE_PAUSE_DAY_OPTIONS.first()) }
 
     fun updateDisplaySetting(setting: DisplaySetting) {
         displaySetting = setting
@@ -117,7 +117,7 @@ fun SettingPreferencesNotificationPage(vm: SettingVM = koinViewModel()) {
                     CardGroup {
                         item(
                             onClick = {
-                                updatePauseDaysInput = "7"
+                                selectedUpdatePauseDays = UPDATE_PAUSE_DAY_OPTIONS.first()
                                 showUpdatePauseDialog = true
                             },
                             headlineContent = { Text(stringResource(R.string.setting_display_page_show_updates_title)) },
@@ -125,6 +125,8 @@ fun SettingPreferencesNotificationPage(vm: SettingVM = koinViewModel()) {
                                 Text(
                                     if (updateChecksEnabled) {
                                         stringResource(R.string.setting_update_reminder_enabled)
+                                    } else if (displaySetting.updateCheckDisabledUntilEpochMillis == Long.MAX_VALUE) {
+                                        stringResource(R.string.compression_pause_forever)
                                     } else {
                                         stringResource(
                                             R.string.setting_update_reminder_paused_until,
@@ -198,22 +200,20 @@ fun SettingPreferencesNotificationPage(vm: SettingVM = koinViewModel()) {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    OutlinedTextField(
-                        value = updatePauseDaysInput,
-                        onValueChange = { input ->
-                            if (input.length <= 10 && input.all { it in '0'..'9' }) {
-                                updatePauseDaysInput = input
-                            }
-                        },
-                        label = { Text("暂停天数") },
-                        supportingText = {
-                            Text(if (updatePauseDays == null) "请输入 1 至 2147483647 的整数" else "到期后自动恢复更新提醒")
-                        },
-                        isError = updatePauseDays == null,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    Text(stringResource(R.string.setting_update_reminder_pause_description))
+                    ConnectedChoiceButtons(
+                        options = UPDATE_PAUSE_DAY_OPTIONS,
+                        selected = selectedUpdatePauseDays,
+                        onSelect = { selectedUpdatePauseDays = it },
+                        // 对话框底色和默认的按钮底色一样，换一个能分开的
+                        containerColor = MaterialTheme.colorScheme.surfaceBright,
+                    ) { days, selected ->
+                        ConnectedChoiceLabel(
+                            text = if (days == PAUSE_UPDATE_INDEFINITELY) stringResource(R.string.compression_pause_forever)
+                                else stringResource(R.string.setting_update_reminder_pause_days, days),
+                            selected = selected,
+                        )
+                    }
                     if (!updateChecksEnabled) {
                         TextButton(
                             onClick = {
@@ -231,13 +231,12 @@ fun SettingPreferencesNotificationPage(vm: SettingVM = koinViewModel()) {
             },
             confirmButton = {
                 TextButton(
-                    enabled = updatePauseDays != null,
                     onClick = {
-                        val days = updatePauseDays ?: return@TextButton
                         updateDisplaySetting(
                             displaySetting.copy(
                                 updateCheckDisabledUntilEpochMillis =
-                                    System.currentTimeMillis() + days.toLong() * MILLIS_PER_DAY,
+                                    if (selectedUpdatePauseDays == PAUSE_UPDATE_INDEFINITELY) Long.MAX_VALUE
+                                    else System.currentTimeMillis() + selectedUpdatePauseDays * MILLIS_PER_DAY,
                             )
                         )
                         showUpdatePauseDialog = false

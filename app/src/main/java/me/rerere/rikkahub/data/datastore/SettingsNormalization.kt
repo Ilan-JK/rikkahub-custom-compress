@@ -31,12 +31,8 @@ internal fun Settings.withBuiltInDefaults(): Settings {
             else -> provider
         }
     }.toMutableList()
-    val assistants = this.assistants.ifEmpty { DEFAULT_ASSISTANTS }.toMutableList()
-    DEFAULT_ASSISTANTS.forEach { defaultAssistant ->
-        if (assistants.none { it.id == defaultAssistant.id }) {
-            assistants.add(defaultAssistant.copy())
-        }
-    }
+    // 内置助手可以删除，只在一个都不剩时补回，不按 id 逐个补齐
+    val assistants = this.assistants.ifEmpty { DEFAULT_ASSISTANTS }
     val ttsProviders = this.ttsProviders.ifEmpty { DEFAULT_TTS_PROVIDERS }.toMutableList()
     DEFAULT_TTS_PROVIDERS.forEach { defaultTTSProvider ->
         if (ttsProviders.none { provider -> provider.id == defaultTTSProvider.id }) {
@@ -60,6 +56,11 @@ internal fun Settings.withoutInvalidReferences(): Settings {
     val validModelIds by lazy { settings.providers.flatMap { it.models }.mapTo(HashSet()) { it.id } }
     val asrProviders = settings.asrProviders.distinctBy { it.id }
     return settings.copy(
+        // 选中的助手被删除后改选第一个，避免直接读 assistantId 的地方拿到失效的 ID
+        assistantId = settings.assistantId
+            .takeIf { id -> settings.assistants.any { it.id == id } }
+            ?: settings.assistants.firstOrNull()?.id
+            ?: settings.assistantId,
         providers = settings.providers.distinctBy { it.id }.map { provider ->
             provider.copyProvider(models = provider.models.distinctBy { model -> model.id })
         },
@@ -100,7 +101,6 @@ private fun Settings.withValuesInRange(): Settings = copy(
     searchServiceSelected = searchServiceSelected.coerceIn(0, (searchServices.size - 1).coerceAtLeast(0)),
     defaultTTSPlaybackSpeed = defaultTTSPlaybackSpeed.coerceIn(0.5f, 2.0f),
     autoCompressThreshold = autoCompressThreshold.coerceIn(AUTO_COMPRESS_THRESHOLD_RANGE),
-    compression = compression.normalized(),
 )
 
 /** 自动压缩触发比例的可选范围，设置页的滑块也用它 */

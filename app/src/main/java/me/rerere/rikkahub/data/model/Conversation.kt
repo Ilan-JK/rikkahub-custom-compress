@@ -165,10 +165,40 @@ fun Conversation.lastContextTokens(): Int? {
 }
 
 /** 在 [afterNodeId] 节点之后插入压缩检查点；该节点已不存在时返回 null。 */
-internal fun Conversation.insertContextCheckpoint(afterNodeId: Uuid, summary: String): Conversation? {
+internal fun Conversation.uncompressedMessages(): List<UIMessage> =
+    currentMessages.drop(currentMessages.indexOfLast { it.isContextCheckpoint } + 1)
+
+internal fun UIMessage.countsForCompression(): Boolean =
+    !isSynthetic && !isContextCheckpoint && !isNoticeOnly &&
+        (role == MessageRole.USER || role == MessageRole.ASSISTANT) && isValidToUpload()
+
+internal fun compressionEndIndex(messages: List<UIMessage>, range: Int): Int {
+    val start = messages.indexOfLast { it.isContextCheckpoint } + 1
+    val eligible = messages.subList(start, messages.size)
+    val count = eligible.count { it.countsForCompression() }
+    val desired = when {
+        range == 0 -> count
+        range > 0 -> minOf(range, count)
+        else -> (count.toLong() + range).coerceAtLeast(0).toInt()
+    }
+    if (desired == 0) return start
+    if (desired == count) return messages.size
+    var seen = 0
+    val selected = eligible.indexOfFirst { it.countsForCompression() && ++seen == desired }
+    var end = start + selected + 1
+    // Keep standalone tool results with their preceding assistant message in older imports.
+    while (messages.getOrNull(end)?.role == MessageRole.TOOL) end++
+    return end
+}
+
+internal fun Conversation.insertContextCheckpoint(
+    afterNodeId: Uuid,
+    summary: String,
+    summaryId: Uuid = Uuid.random(),
+): Conversation? {
     val index = messageNodes.indexOfFirst { it.id == afterNodeId }
     if (index == -1) return null
-    val checkpoint = UIMessage.user(summary).copy(isContextCheckpoint = true).toMessageNode()
+    val checkpoint = UIMessage.user(summary).copy(id = summaryId, isContextCheckpoint = true).toMessageNode()
     return copy(
         messageNodes =
         messageNodes.subList(0, index + 1) + checkpoint + messageNodes.subList(index + 1, messageNodes.size),

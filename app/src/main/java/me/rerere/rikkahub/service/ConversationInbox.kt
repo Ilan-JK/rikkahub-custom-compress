@@ -22,6 +22,7 @@ data class QueuedMessage(
     val isEditing: Boolean = false,
     // Optional in-memory observer; null result means the queued message was withdrawn.
     val reply: CompletableDeferred<String?>? = null,
+    val queuedAt: kotlin.time.TimeMark = kotlin.time.TimeSource.Monotonic.markNow(),
 ) : InboxItem
 
 /**

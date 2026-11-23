@@ -7,6 +7,7 @@ import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.phoneuse.PhoneUseManager
 import me.rerere.rikkahub.phoneuse.isFloatingChatWindowOn
+import me.rerere.rikkahub.phoneuse.isPhoneUseCheckedInSystem
 import me.rerere.tts.provider.TTSManager
 
 class LocalTools(
@@ -29,6 +30,10 @@ class LocalTools(
 
     val screenTimeTool by lazy { buildScreenTimeTool(context, eventBus) }
 
+    val calendarQueryTool by lazy { buildCalendarQueryTool(context) }
+
+    val calendarCreateTool by lazy { buildCalendarCreateTool(context) }
+
     val chartDisplayTool by lazy { buildChartDisplayTool() }
 
     val phoneUseTool by lazy {
@@ -36,6 +41,7 @@ class LocalTools(
             ownPackageName = context.packageName,
             manager = phoneUseManager,
             isFloatingWindowOn = { isFloatingChatWindowOn(context, settingsStore.settingsFlow.value) },
+            isCheckedInSystem = { isPhoneUseCheckedInSystem(context) },
             saveScreenshot = { bytes ->
                 filesManager.createChatFilesByByteArrays(
                     byteArrays = listOf(bytes),
@@ -65,6 +71,10 @@ class LocalTools(
         }
         if (options.contains(LocalToolOption.ScreenTime)) {
             tools.add(screenTimeTool)
+        }
+        if (options.contains(LocalToolOption.Calendar)) {
+            tools.add(calendarQueryTool)
+            tools.add(calendarCreateTool)
         }
         if (options.contains(LocalToolOption.ChartDisplay)) {
             tools.add(chartDisplayTool)

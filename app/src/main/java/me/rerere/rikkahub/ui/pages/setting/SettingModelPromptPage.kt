@@ -30,24 +30,23 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.util.fastForEach
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.AiEditing
 import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.Heading
 import me.rerere.hugeicons.stroke.Idea01
 import me.rerere.hugeicons.stroke.ScanText
 import me.rerere.hugeicons.stroke.Translate
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.ai.prompts.DEFAULT_MID_TURN_COMPRESSION_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_OCR_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_SUGGESTION_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TITLE_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TRANSLATION_PROMPT
-import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
-import me.rerere.rikkahub.data.ai.prompts.DEFAULT_MID_TURN_COMPRESS_PROMPT
+import me.rerere.rikkahub.data.ai.prompts.defaultCompressPrompt
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
-import me.rerere.rikkahub.ui.components.ai.CompressionRequestSheet
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.CardGroupIcon
 import me.rerere.rikkahub.ui.components.ui.CardGroupScope
@@ -56,13 +55,27 @@ import me.rerere.rikkahub.ui.components.ui.CardGroupScope
 internal fun PromptSettingsPage(settings: Settings, vm: SettingVM, contentPadding: PaddingValues) {
     // 正在编辑哪一项；编辑弹窗放在列表外面，CardGroup 里放不了
     var editing by remember { mutableStateOf<PromptSlot?>(null) }
-    var showCompressionRequest by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = contentPadding,
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        item {
+            val containerColor = MaterialTheme.colorScheme.tertiaryContainer
+            val contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+            CardGroup {
+                for (slot in listOf(PromptSlot.COMPRESSION_MAIN, PromptSlot.COMPRESSION_MID_TURN)) {
+                    promptItem(
+                        slot = slot,
+                        settings = settings,
+                        iconContainerColor = containerColor,
+                        iconContentColor = contentColor,
+                        onClick = { editing = it },
+                    )
+                }
+            }
+        }
         item {
             val containerColor = MaterialTheme.colorScheme.primaryContainer
             val contentColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -92,49 +105,33 @@ internal fun PromptSettingsPage(settings: Settings, vm: SettingVM, contentPaddin
             val containerColor = MaterialTheme.colorScheme.secondaryContainer
             val contentColor = MaterialTheme.colorScheme.onSecondaryContainer
             CardGroup {
-                PromptSlot.entries.fastForEach { slot ->
-                    if (slot != PromptSlot.TRANSLATION) {
-                        promptItem(
-                            slot = slot,
-                            settings = settings,
-                            iconContainerColor = containerColor,
-                            iconContentColor = contentColor,
-                            onClick = { editing = it },
-                        )
-                    }
+                for (slot in listOf(PromptSlot.TITLE, PromptSlot.SUGGESTION, PromptSlot.OCR)) {
+                    promptItem(
+                        slot = slot,
+                        settings = settings,
+                        iconContainerColor = containerColor,
+                        iconContentColor = contentColor,
+                        onClick = { editing = it },
+                    )
                 }
             }
         }
-        item {
-            CardGroup {
-                item(
-                    onClick = { showCompressionRequest = true },
-                    headlineContent = { Text("压缩发送配置") },
-                    trailingContent = { Icon(HugeIcons.ArrowRight01, contentDescription = null) },
-                )
-            }
-        }
-    }
-
-    if (showCompressionRequest) {
-        CompressionRequestSheet(
-            settings = settings.compression.request,
-            onUpdate = { update ->
-                vm.updateSettings { latest ->
-                    latest.copy(compression = latest.compression.copy(request = update(latest.compression.request)))
-                }
-            },
-            onDismiss = { showCompressionRequest = false },
-        )
     }
 
     editing?.let { slot ->
+        var value by remember(slot) { mutableStateOf(slot.get(settings)) }
         PromptEditSheet(
-            title = slot.customTitle ?: stringResource(slot.title),
-            description = if (slot.customTitle != null) "{{locale}}：默认语言" else stringResource(slot.variables),
-            value = slot.get(settings),
-            onValueChange = { value -> vm.updateSettings { latest -> slot.set(latest, value) } },
-            onReset = { vm.updateSettings { latest -> slot.set(latest, slot.default) } },
+            title = stringResource(slot.title),
+            description = stringResource(slot.variables),
+            value = value,
+            onValueChange = { updated ->
+                value = updated
+                vm.updateSettings { latest -> slot.set(latest, updated) }
+            },
+            onReset = {
+                value = slot.default
+                vm.updateSettings { latest -> slot.set(latest, slot.default) }
+            },
             onDismiss = { editing = null },
         )
     }
@@ -149,25 +146,34 @@ private enum class PromptSlot(
     val default: String,
     val get: (Settings) -> String,
     val set: (Settings, String) -> Settings,
-    val customTitle: String? = null,
 ) {
-    COMPRESSION(
-        icon = HugeIcons.Heading,
-        title = R.string.chat_page_compress_context_title,
-        variables = R.string.setting_model_page_suggestion_prompt_vars,
-        default = DEFAULT_COMPRESS_PROMPT,
-        get = { it.compression.prompt },
-        set = { settings, value -> settings.copy(compression = settings.compression.copy(prompt = value)) },
-        customTitle = "压缩历史",
+    COMPRESSION_MAIN(
+        icon = HugeIcons.AiEditing,
+        title = R.string.compression_main,
+        variables = R.string.compression_prompt_variables,
+        default = CompressionMainDefault,
+        get = { it.compression.mainPrompt.ifBlank { CompressionMainDefault } },
+        set = { settings, value ->
+            settings.copy(
+                compression = settings.compression.copy(
+                    mainPrompt = value.takeUnless { it == CompressionMainDefault }.orEmpty(),
+                ),
+            )
+        },
     ),
-    MID_TURN_COMPRESSION(
-        icon = HugeIcons.Heading,
-        title = R.string.chat_page_compress_context_title,
-        variables = R.string.setting_model_page_suggestion_prompt_vars,
-        default = DEFAULT_MID_TURN_COMPRESS_PROMPT,
-        get = { it.compression.midTurnPrompt },
-        set = { settings, value -> settings.copy(compression = settings.compression.copy(midTurnPrompt = value)) },
-        customTitle = "中途压缩附加",
+    COMPRESSION_MID_TURN(
+        icon = HugeIcons.AiEditing,
+        title = R.string.compression_mid,
+        variables = R.string.compression_mid_prompt_description,
+        default = DEFAULT_MID_TURN_COMPRESSION_PROMPT,
+        get = { it.compression.midTurnPrompt.ifBlank { DEFAULT_MID_TURN_COMPRESSION_PROMPT } },
+        set = { settings, value ->
+            settings.copy(
+                compression = settings.compression.copy(
+                    midTurnPrompt = value.takeUnless { it == DEFAULT_MID_TURN_COMPRESSION_PROMPT }.orEmpty(),
+                ),
+            )
+        },
     ),
     TRANSLATION(
         icon = HugeIcons.Translate,
@@ -203,6 +209,7 @@ private enum class PromptSlot(
     ),
 }
 
+private val CompressionMainDefault = defaultCompressPrompt("{{locale}}")
 private val Whitespace = Regex("\\s+")
 
 // 一项提示词：标题下面预览当前内容，点击后编辑
@@ -217,7 +224,7 @@ private fun CardGroupScope.promptItem(
     leadingContent = {
         CardGroupIcon(slot.icon, containerColor = iconContainerColor, contentColor = iconContentColor)
     },
-    headlineContent = { Text(slot.customTitle ?: stringResource(slot.title)) },
+    headlineContent = { Text(stringResource(slot.title)) },
     supportingContent = {
         val prompt = slot.get(settings)
         Text(

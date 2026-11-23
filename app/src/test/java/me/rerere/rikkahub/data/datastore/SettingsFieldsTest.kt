@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.datastore
 
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.mutablePreferencesOf
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.descriptors.elementNames
 import me.rerere.ai.core.ReasoningLevel
@@ -9,6 +10,8 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.asr.ASRProviderSetting
 import me.rerere.mediagen.provider.MediaGenerationProviderSetting
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
+import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV6Migration
+import me.rerere.rikkahub.data.datastore.migration.SettingsJsonMigrator
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
@@ -16,10 +19,12 @@ import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.data.model.Tag
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.rikkahub.ui.theme.CustomTheme
+import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.search.SearchCommonOptions
 import me.rerere.search.SearchServiceOptions
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.uuid.Uuid
 
@@ -56,6 +61,9 @@ class SettingsFieldsTest {
         assertEquals(9090, stored["web_server_port"])
         assertEquals(1.5f, stored["default_tts_playback_speed"])
         assertEquals(0.9f, stored["auto_compress_threshold"])
+        assertEquals(SAMPLE.compression, mutablePreferencesOf(
+            SettingsStore.COMPRESSION to (stored.getValue("compression") as String),
+        ).toSettings().compression)
         assertEquals("title", stored["title_prompt"])
         assertEquals("00000000-0000-0000-0000-000000000001", stored["chat_model"])
         assertEquals("LOW", stored["fast_model_reasoning_level"])
@@ -77,6 +85,8 @@ class SettingsFieldsTest {
         assertEquals(null, settings.memoryModelId)
         assertEquals(true, settings.dynamicColor)
         assertEquals(8080, settings.webServerPort)
+        assertEquals(50, settings.compression.messageThreshold)
+        assertEquals(0, settings.compression.range)
     }
 
     @Test
@@ -84,6 +94,55 @@ class SettingsFieldsTest {
         val preferences = mutablePreferencesOf(SettingsStore.FAST_MODEL_REASONING_LEVEL to "REMOVED_LEVEL")
 
         assertEquals(ReasoningLevel.AUTO, preferences.toSettings().fastModelReasoningLevel)
+    }
+
+    @Test
+    fun `upgrade reads compression settings written by the 3_2_0 fork`() = runBlocking {
+        val previous = mutablePreferencesOf(
+            SettingsStore.VERSION to 5,
+            SettingsStore.TITLE_PROMPT to "keep my title prompt",
+            SettingsStore.COMPRESSION to LEGACY_COMPRESSION,
+        )
+        val migration = PreferenceStoreV6Migration()
+        assertTrue(migration.shouldMigrate(previous))
+
+        val migrated = migration.migrate(previous)
+        val settings = migrated.toSettings()
+
+        assertFalse(migration.shouldMigrate(migrated))
+        assertEquals("keep my title prompt", settings.titlePrompt)
+        assertEquals(
+            CompressionSettings(
+                trigger = CompressionTrigger.MessageCount,
+                messageThreshold = 36,
+                range = -12,
+                mainPrompt = "Summarize",
+                midTurnPrompt = "Keep the next step",
+                readAllSummaries = true,
+                systemInstruction = true,
+                tools = false,
+                workspaceReminder = false,
+            ),
+            settings.compression,
+        )
+        assertFalse(migrated[SettingsStore.COMPRESSION].orEmpty().contains("modelId"))
+    }
+
+    @Test
+    fun `a 3_2_0 backup can restore the legacy token ratio trigger`() {
+        val oldCompression = LEGACY_COMPRESSION.replace("MESSAGE_COUNT", "TOKEN_RATIO")
+        val migrated = SettingsJsonMigrator.migrate("""{"compression":$oldCompression}""")
+
+        assertEquals(CompressionTrigger.Context, JsonInstant.decodeFromString<Settings>(migrated).compression.trigger)
+    }
+
+    @Test
+    fun `upgrade leaves 3_3_1 compression settings intact`() = runBlocking {
+        val previous = mutablePreferencesOf(SettingsStore.VERSION to 5).apply { putSettings(SAMPLE) }
+        val migrated = PreferenceStoreV6Migration().migrate(previous)
+
+        assertEquals(previous[SettingsStore.COMPRESSION], migrated[SettingsStore.COMPRESSION])
+        assertEquals(SAMPLE, migrated.toSettings())
     }
 
     @Test
@@ -111,6 +170,21 @@ class SettingsFieldsTest {
 
 private fun id(n: Int) = Uuid.parse("00000000-0000-0000-0000-%012d".format(n))
 
+private val LEGACY_COMPRESSION = """
+    {
+        "modelId": "00000000-0000-0000-0000-000000000032",
+        "reasoningLevel": "HIGH",
+        "prompt": "Summarize",
+        "midTurnPrompt": "Keep the next step",
+        "manualRange": {"mode": "EARLIEST", "earliestCount": 7, "keepRecentCount": 20},
+        "automaticRange": {"mode": "KEEP_RECENT", "earliestCount": 20, "keepRecentCount": 12},
+        "trigger": "MESSAGE_COUNT",
+        "messageThreshold": 36,
+        "summaryMode": "ALL",
+        "request": {"promptRole": "SYSTEM", "includeTools": false, "includeWorkspace": false}
+    }
+""".trimIndent()
+
 // 每个字段都取了和默认值不同的值
 private val SAMPLE = Settings(
     dynamicColor = false,
@@ -136,14 +210,18 @@ private val SAMPLE = Settings(
     suggestionPrompt = "suggestion",
     ocrModelId = id(5),
     ocrPrompt = "ocr",
-    enableAutoCompress = true,
+    enableAutoCompress = false,
     autoCompressThreshold = 0.9f,
     compression = CompressionSettings(
-        prompt = "compress", midTurnPrompt = "resume",
-        manualRange = CompressionRange(CompressionRangeMode.EARLIEST, 12, 8),
-        automaticRange = CompressionRange(CompressionRangeMode.KEEP_RECENT, 16, 10),
-        trigger = AutoCompressionTrigger.MESSAGE_COUNT, messageThreshold = 60,
-        summaryMode = me.rerere.ai.ui.ContextSummaryMode.ALL,
+        trigger = CompressionTrigger.MessageCount,
+        messageThreshold = 30,
+        range = -6,
+        mainPrompt = "Summarize the discussion",
+        midTurnPrompt = "Keep unresolved questions",
+        readAllSummaries = true,
+        systemInstruction = true,
+        tools = false,
+        messageTemplate = false,
     ),
     assistantId = id(20),
     providers = listOf(ProviderSetting.OpenAI(id = id(31), name = "Provider")),

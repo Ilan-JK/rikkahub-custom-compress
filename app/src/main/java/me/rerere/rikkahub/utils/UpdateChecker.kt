@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.json.Json
 import me.rerere.common.http.await
 import me.rerere.rikkahub.AppScope
@@ -21,7 +22,23 @@ import me.rerere.rikkahub.BuildConfig
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
-private const val API_URL = "https://updates.rikka-ai.com/"
+internal const val FORK_REPOSITORY = "https://github.com/Ilan-JK/rikkahub-custom-compress"
+private const val API_URL = "https://api.github.com/repos/Ilan-JK/rikkahub-custom-compress/releases/latest"
+
+@Serializable
+private data class ForkRelease(
+    @SerialName("tag_name") val tag: String,
+    @SerialName("published_at") val publishedAt: String,
+    val body: String? = null,
+    val assets: List<ForkReleaseAsset> = emptyList(),
+)
+
+@Serializable
+private data class ForkReleaseAsset(
+    val name: String,
+    @SerialName("browser_download_url") val url: String,
+    val size: Long,
+)
 
 class UpdateChecker(
     private val client: OkHttpClient,
@@ -50,10 +67,16 @@ class UpdateChecker(
                             )
                             .build()
                     ).await()
-                    if (response.isSuccessful) {
-                        json.decodeFromString<UpdateInfo>(response.body.string())
-                    } else {
-                        throw Exception("Failed to fetch update info")
+                    response.use {
+                        check(it.isSuccessful) { "Failed to fetch update info" }
+                        val release = json.decodeFromString<ForkRelease>(it.body.string())
+                        UpdateInfo(
+                            version = release.tag.removePrefix("v"),
+                            publishedAt = release.publishedAt,
+                            changelog = release.body.orEmpty(),
+                            downloads = release.assets.filter { asset -> asset.name.endsWith(".apk", ignoreCase = true) }
+                                .map { asset -> UpdateDownload(asset.name, asset.url, "${asset.size / (1024 * 1024)} MB") },
+                        )
                     }
                 } catch (e: Exception) {
                     throw Exception("Failed to fetch update info", e)
@@ -72,8 +95,6 @@ class UpdateChecker(
                 setDescription("正在下载更新包...")
                 // 下载完成后通知栏可见
                 setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                // 允许在移动网络和WiFi下下载
-                setAllowedNetworkTypes(DownloadManager.Request.NETWORK_WIFI or DownloadManager.Request.NETWORK_MOBILE)
                 // 设置文件保存路径
                 setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, download.name)
                 // 允许下载的文件类型

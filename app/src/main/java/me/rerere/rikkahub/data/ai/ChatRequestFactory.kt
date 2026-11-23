@@ -16,6 +16,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
@@ -42,10 +43,7 @@ import me.rerere.rikkahub.data.ai.transformers.transformThinkTags
 import me.rerere.rikkahub.data.ai.transformers.transforms
 import me.rerere.rikkahub.data.ai.transformers.visualTransforms
 import me.rerere.rikkahub.data.datastore.Settings
-import me.rerere.rikkahub.data.datastore.CompressionPromptRole
-import me.rerere.rikkahub.data.datastore.CompressionRequestSettings
 import me.rerere.rikkahub.data.datastore.findProvider
-import me.rerere.rikkahub.data.datastore.getCompressionModel
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MemoryFile
@@ -54,6 +52,7 @@ import me.rerere.rikkahub.data.model.getChatModelOf
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.data.repository.memoryId
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import kotlin.time.Clock
 import kotlin.uuid.Uuid
 
@@ -62,7 +61,7 @@ private const val TAG = "ChatRequestFactory"
 /**
  * 一轮对话的请求上下文，按会话固定的配置解析一次。
  *
- * 压缩使用独立模型，按压缩请求设置选择附加内容。
+ * 正常对话和压缩共享会话的模型与 sessionId，压缩可按设置选择提示词和工具。
  */
 class ChatTurnContext(
     val settings: Settings,
@@ -103,19 +102,11 @@ class ChatRequestFactory(
     )
 
     /** 解析本轮的助手、模型、记忆和工具；MCP 服务名不合法时抛出 InvalidMcpServerNamesException */
-    suspend fun createContext(settings: Settings, conversation: Conversation, compression: Boolean = false): ChatTurnContext {
+    suspend fun createContext(settings: Settings, conversation: Conversation, forCompression: Boolean = false): ChatTurnContext {
         // 模型、思考级别、搜索、工具等以会话上固定的配置为准
         val assistant = settings.getAssistantOf(conversation)
-        val selectedModel = if (compression) {
-            settings.getCompressionModel()
-                ?: error("请先在模型设置 → 模型中选择有效的压缩历史模型。")
-        } else {
-            settings.getChatModelOf(conversation)
-                ?: throw IllegalStateException("No chat model selected")
-        }
-        val model = if (compression && !settings.compression.request.includeTools) {
-            selectedModel.copy(tools = emptySet())
-        } else selectedModel
+        val model = settings.getChatModelOf(conversation)
+            ?: throw IllegalStateException("No chat model selected")
         val provider = model.findProvider(settings.providers) ?: error("Provider not found")
         return ChatTurnContext(
             settings = settings,
@@ -125,16 +116,16 @@ class ChatRequestFactory(
             conversationId = conversation.id,
             conversationSystemPrompt = conversation.customSystemPrompt,
             workspaceCwd = conversation.workspaceCwd,
-            memories = if (assistant.enableMemory && (!compression || settings.compression.request.includeMemory)) {
+            memories = if (assistant.enableMemory && (!forCompression || settings.compression.memory)) {
                 memoryRepository.getFiles(assistant.memoryId)
             } else emptyList(),
-            tools = if (compression && !settings.compression.request.includeTools) emptyList() else chatToolFactory.createTools(
+            tools = if (!forCompression || settings.compression.tools) chatToolFactory.createTools(
                 settings = settings,
                 assistant = assistant,
                 model = model,
                 conversationId = conversation.id,
                 workspaceCwd = conversation.workspaceCwd,
-            ),
+            ) else emptyList(),
         )
     }
 
@@ -149,6 +140,7 @@ class ChatRequestFactory(
         processingStatus: MutableStateFlow<String?>,
         takePendingParts: suspend () -> List<UIMessagePart> = { emptyList() },
         pauseAfterTools: (UIMessage) -> Boolean = { false },
+        firstResponseElapsedMs: (() -> Long)? = null,
     ): Pair<AgentRequest, AgentHooks> {
         val request = AgentRequest(
             provider = usageRecorder.wrap(
@@ -160,6 +152,7 @@ class ChatRequestFactory(
             tools = turn.tools,
             stream = turn.assistant.streamOutput,
             retry = turn.settings.retryPolicy(),
+            firstResponseElapsedMs = firstResponseElapsedMs,
         )
         val hooks = object : AgentHooks {
             override suspend fun prepareStep(messages: List<UIMessage>): StepRequest {
@@ -171,6 +164,10 @@ class ChatRequestFactory(
                 message.transformNewParts(newPartsFrom) {
                     it.visualTransforms(outputTransformers, context, turn.model, turn.assistant, turn.settings)
                 }
+
+            override fun onModelRequest(reply: UIMessage, step: StepRequest) {
+                RequestInspection.record(reply.id, step)
+            }
 
             override suspend fun finishStep(message: UIMessage, newPartsFrom: Int) =
                 message.transformNewParts(newPartsFrom) {
@@ -189,18 +186,18 @@ class ChatRequestFactory(
     /**
      * 生成压缩摘要。
      *
-     * 手动、自动及中途压缩共用发送内容和指令角色设置。
-     * 历史作为待处理材料发送，不作为本轮正在进行的对话。
+     * 使用与正常对话相同的模型和消息转换，按压缩设置筛选内容并加入压缩指令。
      */
     suspend fun generateCompressionSummary(
         turn: ChatTurnContext,
         messages: List<UIMessage>,
         compressPrompt: String,
+        inspect: (StepRequest) -> Unit = {},
     ): String {
         // 组装请求要把全部历史过一遍输入转换器，长对话要算好几秒：不能放在调用方的主线程上，
         // 这段纯计算里也检查不到取消。放进独立的协程，调用方取消时 await 立刻返回、不用等它算完；
         // 没算完的那份同时被取消，在下一个挂起点停下，最迟在发出请求之前
-        val work = CoroutineScope(Dispatchers.IO).async { requestCompressionSummary(turn, messages, compressPrompt) }
+        val work = CoroutineScope(Dispatchers.IO).async { requestCompressionSummary(turn, messages, compressPrompt, inspect) }
         return try {
             work.await()
         } finally {
@@ -212,74 +209,116 @@ class ChatRequestFactory(
         turn: ChatTurnContext,
         messages: List<UIMessage>,
         compressPrompt: String,
+        inspect: (StepRequest) -> Unit,
     ): String {
-        val (requestMessages, params) = buildStep(turn, messages, compression = turn.settings.compression.request)
-        // 压缩指令不经过输入转换器，模板转换器会把其中的花括号当成模板语法
+        val step = previewRequest(turn, messages, compressPrompt)
+        val (requestMessages, params) = step
         val result = withRetry(
             policy = turn.settings.retryPolicy(),
             onRetry = { Log.w(TAG, "Compression request failed, retrying in ${it.delay}", it.cause) },
         ) {
+            inspect(step)
             usageRecorder.wrap(
                 providerManager.getProviderByType(turn.providerSetting),
                 UsageTag(UsageSource.COMPRESSION, turn.assistant.id, turn.conversationId),
             ).generateText(
                 providerSetting = turn.providerSetting,
-                messages = requestMessages.withCompressionPrompt(compressPrompt, turn.settings.compression.request.promptRole),
+                messages = requestMessages,
+                // 助手的输出上限是给聊天回复定的，结构化摘要写不完会被截断；max_tokens 不属于请求前缀，改了不影响缓存
                 params = params,
             )
+        }
+        check(result.finishReason?.lowercase() !in setOf("length", "max_tokens", "max_output_tokens", "incomplete")) {
+            context.getString(R.string.compression_incomplete)
         }
         val summary = result.message.compressionSummaryOrNull()
             ?: error(context.getString(R.string.chat_page_compress_tool_call_response))
         return summary.ifBlank { error("Failed to generate compressed summary") }
     }
 
-    /** 正常对话保持原有组装方式，压缩请求按共用配置筛选附加内容。 */
+    internal suspend fun previewRequest(turn: ChatTurnContext, messages: List<UIMessage>, compressPrompt: String? = null): StepRequest {
+        val step = buildStep(turn, messages, compressPrompt = compressPrompt)
+        return if (compressPrompt == null) step else step.copy(params = step.params.copy(maxTokens = null))
+    }
+
+    /** 一步请求交给供应商适配层的消息和参数，正常对话和压缩共用。 */
     private suspend fun buildStep(
         turn: ChatTurnContext,
         messages: List<UIMessage>,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
-        compression: CompressionRequestSettings? = null,
+        compressPrompt: String? = null,
     ): StepRequest {
-        val assistant = turn.assistant.forCompression(compression)
-        val tools = if (compression?.includeTools == false) emptyList() else turn.tools
+        val compression = turn.settings.compression.takeIf { compressPrompt != null }
+        val assistant = turn.assistant.copy(
+            modeInjectionIds = if (compression?.modeInjections == false) emptySet() else turn.assistant.modeInjectionIds,
+            lorebookIds = if (compression?.lorebooks == false) emptySet() else turn.assistant.lorebookIds,
+        )
         val requestMessages = buildList {
-            val system = buildRequestSystemPrompt(
-                assistant = assistant,
-                conversationSystemPrompt = turn.conversationSystemPrompt,
-                memoryPrompt = if (assistant.enableMemory && compression?.includeMemory != false) {
-                    buildMemoryPrompt(turn.memories)
-                } else null,
-                toolPrompts = tools.map { it.systemPrompt(turn.model, messages) },
-                compression = compression,
-            )
+            val system = buildString {
+                val effectiveSystemPrompt =
+                    if (assistant.allowConversationSystemPrompt && !turn.conversationSystemPrompt.isNullOrBlank()) {
+                        turn.conversationSystemPrompt
+                    } else {
+                        assistant.systemPrompt
+                    }
+                if (compression?.assistantPrompt != false && effectiveSystemPrompt.isNotBlank()) {
+                    append(effectiveSystemPrompt)
+                }
+
+                // 记忆
+                if (assistant.enableMemory && compression?.memory != false) {
+                    appendLine()
+                    append(buildMemoryPrompt(turn.memories))
+                }
+                // 工具prompt
+                turn.tools.forEach { tool ->
+                    appendLine()
+                    append(tool.systemPrompt(turn.model, messages))
+                }
+            }
             if (system.isNotBlank()) {
                 add(UIMessage.system(prompt = system).copy(isSynthetic = true))
             }
-            addAll(
-                messages.limitContext(assistant.contextMessageLimit, turn.settings.compression.summaryMode)
-                    .let { if (compression == null) it.withContinuationHint() else it }
+            val history = messages.limitContext(
+                if (compression == null) assistant.contextMessageLimit else 0,
+                turn.settings.compression.readAllSummaries,
             )
+            addAll(if (compression == null) history.withContinuationHint() else history)
         }.transforms(
-            transformers = inputTransformers.filter { it.includedInCompression(compression) },
+            transformers = if (compression == null) inputTransformers else inputTransformers.filter {
+                when (it) {
+                    TimeReminderTransformer -> compression.timeReminder
+                    is WorkspaceReminderTransformer -> compression.workspaceReminder
+                    is TemplateTransformer -> compression.messageTemplate
+                    else -> true
+                }
+            },
             context = context,
             model = turn.model,
             assistant = assistant,
             settings = turn.settings,
             processingStatus = processingStatus,
             workspaceCwd = turn.workspaceCwd,
-        ).expandNotices()
-        val params = if (compression != null) {
-            backgroundTextGenerationParams(
-                model = turn.model,
-                sessionId = turn.conversationId,
-                reasoningLevel = turn.settings.compression.reasoningLevel,
-            ).copy(tools = tools)
-        } else TextGenerationParams(
+        ).expandNotices().let { prepared ->
+            if (compressPrompt == null) prepared else {
+                val tagged = prepared.map { message ->
+                    if (message.isContextCheckpoint) message.copy(
+                        parts = listOf(UIMessagePart.Text("<compression_summary>\n${message.toText()}\n</compression_summary>"))
+                    ) else message
+                }
+                if (compression?.systemInstruction == true) {
+                    val system = tagged.filter { it.role == MessageRole.SYSTEM }.map { it.toText() }
+                    listOf(UIMessage.system((system + compressPrompt).joinToString("\n\n")).copy(isSynthetic = true)) +
+                        tagged.filterNot { it.role == MessageRole.SYSTEM }
+                } else tagged + UIMessage.user(compressPrompt)
+            }
+        }
+        val params = TextGenerationParams(
             model = turn.model,
             temperature = assistant.temperature,
             topP = assistant.topP,
             maxTokens = assistant.maxTokens,
-            tools = tools,
+            tools = turn.tools,
             reasoningLevel = assistant.reasoningLevel,
             customHeaders = buildList {
                 addAll(assistant.customHeaders)
@@ -291,112 +330,46 @@ class ChatRequestFactory(
             },
             sessionId = turn.conversationId.toString(),
         )
-        return StepRequest(requestMessages, params)
+        return StepRequest(
+            requestMessages.trimRequestReasoning(
+                keepCurrentToolTurn = compressPrompt == null || (
+                    compression?.systemInstruction == true &&
+                        messages.lastOrNull()?.parts?.lastOrNull() is UIMessagePart.Tool
+                    ),
+                replayAllForTools = turn.providerSetting.replaysReasoningAcrossToolTurns(params),
+                allowReasoning = (turn.providerSetting as? ProviderSetting.OpenAI)
+                    ?.let { it.useResponseApi || it.includeHistoryReasoning } ?: true,
+            ),
+            params,
+        )
     }
 }
 
-internal fun buildRequestSystemPrompt(
-    assistant: Assistant,
-    conversationSystemPrompt: String?,
-    memoryPrompt: String?,
-    toolPrompts: List<String>,
-    compression: CompressionRequestSettings?,
-): String = buildString {
-    if (compression?.includeAssistantPrompt != false) {
-        append(
-            if (assistant.allowConversationSystemPrompt && !conversationSystemPrompt.isNullOrBlank()) {
-                conversationSystemPrompt
-            } else assistant.systemPrompt
-        )
-    }
-    if (assistant.enableMemory && compression?.includeMemory != false && memoryPrompt != null) {
-        appendLine()
-        append(memoryPrompt)
-    }
-    if (compression?.includeTools != false) {
-        toolPrompts.forEach {
-            appendLine()
-            append(it)
+private fun ProviderSetting.replaysReasoningAcrossToolTurns(params: TextGenerationParams): Boolean =
+    this is ProviderSetting.OpenAI && !useResponseApi &&
+        baseUrl.toHttpUrlOrNull()?.host == "api.deepseek.com" &&
+        params.reasoningLevel.isEnabled &&
+        ModelAbility.REASONING in params.model.abilities &&
+        ModelAbility.TOOL in params.model.abilities && params.tools.isNotEmpty()
+
+/** Keep reasoning only where a provider may need it to continue a tool exchange. */
+internal fun List<UIMessage>.trimRequestReasoning(
+    keepCurrentToolTurn: Boolean,
+    replayAllForTools: Boolean = false,
+    allowReasoning: Boolean = true,
+): List<UIMessage> {
+    if (allowReasoning && replayAllForTools) return this
+
+    val lastUser = indexOfLast { it.role == MessageRole.USER && !it.isSynthetic }
+    val currentToolTurn = allowReasoning && keepCurrentToolTurn &&
+        (lastUser + 1 until size).any { this[it].hasPart<UIMessagePart.Tool>() }
+    return mapIndexedNotNull { index, message ->
+        if (message.role != MessageRole.ASSISTANT || (currentToolTurn && index > lastUser)) {
+            return@mapIndexedNotNull message
         }
-    }
-}
-
-internal fun Assistant.forCompression(options: CompressionRequestSettings?): Assistant = if (options == null) this else copy(
-    modeInjectionIds = if (options.includeModeInjections) modeInjectionIds else emptySet(),
-    lorebookIds = if (options.includeLorebooks) lorebookIds else emptySet(),
-)
-
-internal fun InputMessageTransformer.includedInCompression(options: CompressionRequestSettings?): Boolean = when {
-    options == null -> true
-    this is TimeReminderTransformer -> options.includeTimeReminders
-    this is WorkspaceReminderTransformer -> options.includeWorkspace
-    this is TemplateTransformer -> options.includeMessageTemplate
-    else -> true
-}
-
-internal fun List<UIMessage>.withCompressionPrompt(prompt: String, role: CompressionPromptRole): List<UIMessage> {
-    val messages = withExistingSummaryMarkers()
-    val systemParts = messages.filter { it.role == MessageRole.SYSTEM }.flatMap { it.parts }
-    val history = UIMessage.user("").copy(
-        parts = buildList {
-            add(UIMessagePart.Text("<conversation_history type=\"source_material\">"))
-            messages.filter { it.role != MessageRole.SYSTEM }.forEachIndexed { index, message ->
-                add(UIMessagePart.Text("<message index=\"${index + 1}\" role=\"${message.role.name.lowercase()}\">"))
-                // 工具调用作为已发生的记录，避免被 API 当成本轮待执行的调用。
-                addAll(listOf(message).withToolHistoryAsText().single().parts.map { part ->
-                    if (part is UIMessagePart.Reasoning) {
-                        UIMessagePart.Text("<reasoning>\n${part.reasoning}\n</reasoning>")
-                    } else part
-                })
-                add(UIMessagePart.Text("</message>"))
-            }
-            add(UIMessagePart.Text("</conversation_history>"))
-        },
-        isSynthetic = true,
-    )
-    return buildList {
-        // Claude 和 Google 只读取第一条系统信息，将选中的系统内容合并。
-        val parts = if (role == CompressionPromptRole.SYSTEM) systemParts + UIMessagePart.Text(prompt) else systemParts
-        if (parts.isNotEmpty()) add(UIMessage.system("").copy(parts = parts, isSynthetic = true))
-        add(history)
-        if (role == CompressionPromptRole.USER) add(UIMessage.user(prompt).copy(isSynthetic = true))
-    }
-}
-
-@Suppress("DEPRECATION")
-internal fun List<UIMessage>.withToolHistoryAsText(): List<UIMessage> = map { message ->
-    message.copy(
-        role = if (message.role == MessageRole.TOOL) MessageRole.USER else message.role,
-        parts = message.parts.flatMap { part ->
-            when (part) {
-                is UIMessagePart.Tool -> listOf(
-                    UIMessagePart.Text("[Tool: ${part.toolName}]\nInput: ${part.input}\nResult:"),
-                ) + part.output
-                is UIMessagePart.ServerTool -> listOf(
-                    UIMessagePart.Text("[Server tool: ${part.toolName}]\nInput: ${part.input}\nResult: ${part.output}"),
-                )
-                is UIMessagePart.ToolCall -> listOf(
-                    UIMessagePart.Text("[Tool: ${part.toolName}]\nInput: ${part.arguments}"),
-                )
-                is UIMessagePart.ToolResult -> listOf(
-                    UIMessagePart.Text("[Tool result: ${part.toolName}]\n${part.content}"),
-                )
-                else -> listOf(part)
-            }
-        },
-    )
-}
-
-/** Wrap request copies after transformers so templates cannot rewrite the boundaries. */
-internal fun List<UIMessage>.withExistingSummaryMarkers(): List<UIMessage> {
-    var index = 0
-    return map { message ->
-        if (!message.isContextCheckpoint) return@map message
-        index++
-        message.copy(
-            parts = listOf(UIMessagePart.Text("<existing_summary index=\"$index\">")) +
-                message.parts + UIMessagePart.Text("</existing_summary>"),
-        )
+        val parsed = listOf(message).transformThinkTags(now = Clock.System.now(), generationFinished = false).single()
+        val parts = parsed.parts.filterNot { it is UIMessagePart.Reasoning }
+        if (parts.size == parsed.parts.size) message else parsed.copy(parts = parts).takeIf { it.isValidToUpload() }
     }
 }
 

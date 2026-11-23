@@ -68,8 +68,19 @@ fun ChatMessageNerdLine(
     color: Color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f),
 ) {
     val settings = LocalSettings.current
+    if (!settings.displaySetting.showTokenUsage) return
+    val statsTextStyle = MaterialTheme.typography.labelSmall.copy(color = color)
+    val statsPadding = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+    val firstResponseText = message.firstResponseMs?.let {
+        "${stringResource(R.string.compression_first_response)} ${(it / 1000f).toFixed(2)}s"
+    }
     val usage = message.usage
-    if (!settings.displaySetting.showTokenUsage || usage == null) return
+    if (usage == null) {
+        if (firstResponseText != null) {
+            Text(text = firstResponseText, modifier = modifier.then(statsPadding), style = statsTextStyle)
+        }
+        return
+    }
 
     val stats = remember(message) { message.nerdStats(usage) }
     // 消息里的模型快照不带上下文窗口，只能从设置里按 ID 找；模型被删了就不显示窗口大小
@@ -85,14 +96,14 @@ fun ChatMessageNerdLine(
             RichTooltip(
                 title = { Text(stringResource(R.string.chat_message_usage_title)) },
             ) {
-                UsageDetails(stats, contextLength)
+                UsageDetails(stats, contextLength, message.firstResponseMs)
             }
         },
         state = tooltipState,
         enableUserInput = false,
         modifier = modifier,
     ) {
-        ProvideTextStyle(MaterialTheme.typography.labelSmall.copy(color = color)) {
+        ProvideTextStyle(statsTextStyle) {
             CompositionLocalProvider(LocalContentColor provides color) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -100,7 +111,7 @@ fun ChatMessageNerdLine(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .clickable { scope.launch { tooltipState.show() } }
-                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                        .then(statsPadding),
                 ) {
                     if (stats.steps > 1) {
                         StatsItem(
@@ -113,6 +124,9 @@ fun ChatMessageNerdLine(
                             icon = { StatsIcon(HugeIcons.Zap, stringResource(R.string.chat_message_usage_speed)) },
                             content = { Text(text = "${stats.tps.toFixed(1)} tok/s") }
                         )
+                    }
+                    if (firstResponseText != null) {
+                        Text(text = firstResponseText)
                     }
                     StatsItem(
                         icon = { StatsIcon(HugeIcons.Layers01, stringResource(R.string.chat_message_usage_context)) },
@@ -131,7 +145,7 @@ fun ChatMessageNerdLine(
 }
 
 @Composable
-private fun UsageDetails(stats: NerdStats, contextLength: Int?) {
+private fun UsageDetails(stats: NerdStats, contextLength: Int?, firstResponseMs: Long?) {
     Column(
         verticalArrangement = Arrangement.spacedBy(2.dp),
         modifier = Modifier.padding(vertical = 4.dp),
@@ -150,6 +164,9 @@ private fun UsageDetails(stats: NerdStats, contextLength: Int?) {
         }
         if (stats.tps != null) UsageDetailRow(stringResource(R.string.chat_message_usage_speed), "${stats.tps.toFixed(1)} tok/s")
         if (stats.durationMillis != null) UsageDetailRow(stringResource(R.string.chat_message_usage_duration), "${(stats.durationMillis / 1000f).toFixed(1)}s")
+        firstResponseMs?.let {
+            UsageDetailRow(stringResource(R.string.compression_first_response), "${(it / 1000f).toFixed(2)}s")
+        }
     }
 }
 

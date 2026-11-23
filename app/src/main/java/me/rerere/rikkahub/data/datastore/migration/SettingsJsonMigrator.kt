@@ -76,6 +76,8 @@ object SettingsJsonMigrator {
                 root["providers"] = JsonArray(providers.map(::migrateProviderQuotaQuery))
             }
 
+            root["compression"]?.let { root["compression"] = migrateCompressionSettings(it) }
+
             JsonInstant.encodeToString(JsonObject(root))
         }.onFailure {
             Log.e(TAG, "migrate: Failed to migrate settings JSON, using original", it)

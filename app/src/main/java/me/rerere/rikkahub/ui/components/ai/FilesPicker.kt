@@ -77,6 +77,9 @@ import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.lastContextTokens
+import me.rerere.rikkahub.data.model.uncompressedMessages
+import me.rerere.rikkahub.data.model.countsForCompression
+import me.rerere.rikkahub.data.datastore.CompressionTrigger
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.ui.components.ui.ExtensionSelector
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -109,7 +112,7 @@ internal fun FilesPicker(
     chatModel: Model?,
     state: ChatInputState,
     mcpManager: McpManager,
-    onCompressContext: (additionalPrompt: String, range: me.rerere.rikkahub.data.datastore.CompressionRange) -> Job,
+    onCompressContext: (additionalPrompt: String, keepRecentMessages: Int) -> Job,
     onUpdateAssistant: (Assistant) -> Unit,
     onUpdateWorkspaceCwd: (String?) -> Unit,
     onUpdateSearchMode: (SearchMode) -> Unit,
@@ -328,7 +331,10 @@ internal fun FilesPicker(
                                 val contextTokens = remember(conversation.messageNodes) {
                                     conversation.lastContextTokens()
                                 }
-                                val contextLength = chatModel?.contextLength?.takeIf { it > 0 }
+                                val countMode = settings.compression.trigger == CompressionTrigger.MessageCount
+                                val contextLength = chatModel?.contextLength?.takeIf { !countMode && it > 0 }
+                                val remaining = conversation.uncompressedMessages().count { it.countsForCompression() }
+                                val summaryCount = conversation.currentMessages.count { it.isContextCheckpoint }
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -336,11 +342,13 @@ internal fun FilesPicker(
                                     Column(horizontalAlignment = Alignment.End) {
                                         if (conversation.messageNodes.isNotEmpty()) {
                                             Text(
-                                                text = stringResource(R.string.chat_page_message_count, conversation.messageNodes.size),
+                                                text = stringResource(if (countMode) R.string.compression_uncovered else R.string.chat_page_message_count, remaining),
                                                 style = MaterialTheme.typography.labelMedium,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             )
                                         }
+                                        if (countMode) Text(stringResource(R.string.compression_summary_count, summaryCount),
+                                            style = MaterialTheme.typography.labelSmall)
                                         if (contextTokens != null && contextLength != null) {
                                             Text(
                                                 text = "${contextTokens.formatNumber()} / ${contextLength.formatNumber()}",
@@ -380,7 +388,7 @@ internal fun FilesPicker(
         CompressContextDialog(onDismiss = {
             onShowCompressDialogChange(false)
             onDismiss()
-        }, onConfirm = onCompressContext)
+        }, initialRange = settings.compression.range, onConfirm = onCompressContext)
     }
 }
 

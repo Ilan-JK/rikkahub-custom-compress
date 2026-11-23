@@ -2,7 +2,7 @@
 
 Modified by Ilan-JK, 2026-11-12, under the root AGPL-3.0 license.
 
-The 3.2.0 ARM64 APK corresponds to the source commit selected by its release tag. The earlier 3.1.2 APK used source snapshot `b24477c2b9bb5b1da3ef1b651c47d9f9db0c20ff`; its historical release and attached source materials remain available.
+The 3.3.1 and 3.2.0 ARM64 APKs correspond to the source commits selected by their release tags. The earlier 3.1.2 APK used source snapshot `b24477c2b9bb5b1da3ef1b651c47d9f9db0c20ff`; its historical release and attached source materials remain available.
 
 ## Toolchain used
 
@@ -23,13 +23,13 @@ pnpm --dir web-ui install --frozen-lockfile
 gradle --no-daemon -I tools/custom-apk/local.init.gradle '-Prikkahub.localOptimized=true' '-Pandroid.overridePathCheck=true' assembleGithubRelease
 ```
 
-Outputs are under `app/build/outputs/apk/github/release/`; select the ARM64 file. This builds all ABI splits as configured upstream; it does not make the universal file ARM64-only. Do not run a public build with your personal `google-services.json` in `app/` when using the placeholder configuration.
+Outputs are under `app/build/outputs/apk/github/release/`; With the optimization flag above, the output is a single ARM64 APK. Do not run a public build with your personal `google-services.json` in `app/` when using the placeholder configuration.
 
 The init script retains the functional local release overrides: application ID suffix `.debug`, debug signing configuration, optimization enabled, `debuggable=false`, placeholder Firebase resources, collection disabled, and Google Services/Crashlytics upload tasks disabled where applicable. The portable script uses repository-relative resource paths and normal upstream dependency repositories.
 
 The historical 3.1.2 release's `source-and-build-materials.zip` also contains its original init script, localhost dependency-cache helper, and manifest/resources. They contain no credentials. Those files document the older build and are not the current application source. The current repository-relative override above uses normal dependency repositories and does not require that cache helper.
 
-The 3.2.0 build used cached dependencies, existing generated baseline/startup profiles, R8 and resource optimization. The APK embeds its compiled baseline profile; regenerating device-specific profiles is a separate upstream workflow. Upstream includes a mutable `sqlite-android` SNAPSHOT dependency. Rebuilt APK bytes, size, profiles and signing certificate may therefore differ. General-purpose SDKs, caches and private keys are not included.
+The 3.3.1 and 3.2.0 builds used cached dependencies, existing generated baseline/startup profiles, R8 and resource optimization. The APK embeds its compiled baseline profile; regenerating device-specific profiles is a separate upstream workflow. Upstream includes a mutable `sqlite-android` SNAPSHOT dependency. Rebuilt APK bytes, size, profiles and signing certificate may therefore differ. General-purpose SDKs, caches and private keys are not included.
 
 ## Native component sources
 

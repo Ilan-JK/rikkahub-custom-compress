@@ -24,6 +24,7 @@ data class AgentRequest(
     /** 最多请求模型的次数 */
     val maxSteps: Int = 256,
     val retry: RetryPolicy = RetryPolicy.NONE,
+    val firstResponseElapsedMs: (() -> Long)? = null,
 )
 
 /** 调用方在循环各个节点上的介入点 */
@@ -35,6 +36,8 @@ interface AgentHooks {
      * 返回的 [StepRequest.params] 里的 tools 会被换成 [AgentRequest.tools]，声明给模型的工具和能执行的工具始终是同一份。
      */
     suspend fun prepareStep(messages: List<UIMessage>): StepRequest
+
+    fun onModelRequest(reply: UIMessage, step: StepRequest) {}
 
     /**
      * 生成过程中每次发出更新之前调用，返回值只用于这一次 [AgentEvent.MessageUpdated]，不会写回循环内部。

@@ -2,33 +2,27 @@
 
 <img src="docs/icon.png" alt="RikkaHub icon" width="80" />
 
-Context-compression customization based on RikkaHub 3.2.0, maintained by Ilan-JK.
+Context-compression customization based on RikkaHub 3.3.1, maintained by Ilan-JK.
 
 [简体中文](README_ZH_CN.md) | [繁體中文](README_ZH_TW.md) | English
 
 ## Download
 
-**[Download ARM64 APK](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/download/3.2.0-custom-compress-3/RikkaHub-3.2.0-custom-compress-3-arm64.apk)** · [Release notes and source materials](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/latest)
+**[Download ARM64 APK](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/download/3.3.1-custom-compress.5/RikkaHub-3.3.1-custom-compress.5-arm64.apk)** · [Release notes and source materials](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/latest)
 
-Version `3.2.0-custom-compress-3`, 16.32 MB (15.57 MiB), Android 8.0+, ARM64.
+Version `3.3.1-custom-compress.5`, 16.47 MB (15.71 MiB), Android 8.0+, ARM64.
 
 The package ID is `me.rerere.rikkahub.debug`, with a separate signing certificate, so it installs alongside the official app rather than replacing it.
 
 ## What This Version Changes
 
-In **Settings > Model > Prompts > Compress history**, edit and save the entire compression prompt, next to translation, title generation, chat suggestions and OCR. The editor also supports resetting to the original prompt and the `{locale}` placeholder.
+Edit the main and mid-turn compression prompts under **Models and services → Default models and prompts → Prompts**. Compression uses the current conversation model.
 
-- Independent manual and automatic ranges: compress the earliest messages or keep the latest messages, with separately saved counts (default 20).
-- Automatic compression by token ratio or uncovered-message count (default 50); count-based compression runs only when the completed turn is idle.
-- Read only the latest summary or all summaries together; covered originals remain local and are excluded from requests.
-- Editable and resettable full and mid-turn compression prompts, shared by manual and automatic compression.
-
-- Under **Model Settings > Prompts > Compression Request Settings**, choose whether to include the assistant prompt, mode injections, lorebooks, memory, tool definitions and instructions, time reminders, workspace instructions and message templates; manual and automatic compression share these settings.
-- Send compression instructions as a user request or system prompt, with the existing behavior retained by default.
-- Choose an independent compression model and reasoning level under **Model Settings > Models > Compression model**, shared by manual, automatic and mid-turn compression. Select this model after upgrading; compression no longer follows the chat model.
-- Compression requests clearly separate instructions, conversation source material and existing summaries to reduce accidental continuation. These markers apply only to compression requests.
-- The top-right conversation-map button opens the map directly; Export and Delete have been removed from that location.
-- The conversation map initially hides originals covered by summaries. Expand a summary's originals explicitly, or delete the summary to reveal its content again.
+- Trigger automatic compression by context usage or by uncovered message count. The count defaults to 50 and triggers only when the conversation is idle.
+- Set the compression range to `0` for all eligible messages, `+n` for the earliest n, or `-n` to keep the latest n.
+- Choose which summaries to read, the role of the compression instruction, and what to include in compression requests.
+- Open the conversation map from the top right. Messages covered by a summary are collapsed by default.
+- Inspect requests from the message menu. First-packet timing uses the compact stats style as soon as streaming starts.
 
 ## Why Restore It?
 

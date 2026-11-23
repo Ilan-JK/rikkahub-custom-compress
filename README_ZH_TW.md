@@ -2,33 +2,27 @@
 
 <img src="docs/icon.png" alt="RikkaHub 圖示" width="80" />
 
-基於 RikkaHub 3.2.0，由 Ilan-JK 維護的上下文壓縮自訂版。
+基於 RikkaHub 3.3.1，由 Ilan-JK 維護的上下文壓縮自訂版。
 
 [简体中文](README_ZH_CN.md) | 繁體中文 | [English](README.md)
 
 ## 下載
 
-**[下載 ARM64 APK](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/download/3.2.0-custom-compress-3/RikkaHub-3.2.0-custom-compress-3-arm64.apk)** · [版本說明與原始碼資料](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/latest)
+**[下載 ARM64 APK](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/download/3.3.1-custom-compress.5/RikkaHub-3.3.1-custom-compress.5-arm64.apk)** · [版本說明與原始碼資料](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/latest)
 
-版本 `3.2.0-custom-compress-3`，16.32 MB（15.57 MiB），Android 8.0 及以上，ARM64。
+版本 `3.3.1-custom-compress.5`，16.47 MB（15.71 MiB），Android 8.0 及以上，ARM64。
 
 套件名稱為 `me.rerere.rikkahub.debug`，使用獨立簽章，可與官方版並存，不能直接覆蓋官方版。
 
 ## 本版改了什麼
 
-在 **設定 → 模型 → 提示詞 → 壓縮歷史** 中，可以編輯並儲存完整的壓縮提示詞。它與翻譯、標題產生、聊天回覆建議及 OCR 辨識放在同一頁面，支援還原原始提示詞和 `{locale}` 語言變數。
+在 **模型與服務 → 預設模型和提示詞 → 提示詞** 編輯主壓縮提示詞和中途附加提示詞。壓縮沿用目前的對話模型。
 
-- 手動與自動壓縮分別設定最早壓縮或最近保留的資訊數，分別記住數值，預設 20。
-- 自動壓縮可選 Token 比例或資訊數量觸發，後者預設 50，僅在完整回合結束後的閒置階段執行。
-- 支援僅讀取最新摘要或共同讀取多個摘要；原文保留於本機，不再傳送。
-- 完整與回合中壓縮提示詞可編輯及還原，手動與自動壓縮共用設定。
-
-- 在 **模型設定 → 提示詞 → 壓縮傳送設定** 中，選擇是否包含助手提示詞、模式插入提示詞、世界書、記憶、工具定義與說明、時間提醒、工作區提示及資訊範本，手動與自動壓縮共用設定。
-- 壓縮指令可選擇以使用者請求或系統提示詞傳送，預設保留原有方式。
-- 在 **模型設定 → 模型 → 壓縮歷史模型** 中獨立選擇壓縮模型與思考深度，手動、自動與回合中壓縮共用。升級後請先選擇此模型，壓縮不再沿用目前的對話模型。
-- 壓縮請求明確區分指令、待摘要的歷史資料與舊摘要，減少將壓縮工作誤作續寫的情況；這些標記僅用於壓縮請求。
-- 右上角按鈕直接開啟對話地圖，移除此處的「匯出」與「刪除」。
-- 對話地圖預設隱藏摘要涵蓋的原文，可主動展開；刪除摘要後，對應原文恢復顯示。
+- 自動壓縮可按上下文比例或未壓縮訊息筆數觸發。預設 50 筆，只在對話閒置時觸發。
+- 壓縮範圍預設為 `0`，壓縮所有可選訊息。`+n` 壓縮最早的 n 筆，`-n` 保留最近的 n 筆。
+- 可選擇只讀取最新摘要或讀取所有摘要，也可設定壓縮指令角色和隨請求傳送的內容。
+- 從右上角直接開啟對話地圖。摘要涵蓋的原文預設摺疊。
+- 訊息選單可檢視請求內容。串流回覆收到第一個封包後，立即以統計列的小字顯示耗時。
 
 ## 為什麼說「恢復」
 

@@ -28,3 +28,5 @@ app/src/main/generated/baselineProfiles/
 *.apk
 *.aab
 google-services.json
+
+local.properties.*

@@ -96,6 +96,7 @@ internal class AgentLoop(
             parts = emptyList(),
             modelId = params.model.id,
         )
+        hooks.onModelRequest(base, step.copy(params = params))
         val generated = if (request.stream) {
             stream(step.messages, params, base)
         } else {
@@ -133,6 +134,9 @@ internal class AgentLoop(
                     try {
                         val mark = firstChunk ?: TimeSource.Monotonic.markNow().also { firstChunk = it }
                         attempt = handler.handle(listOf(attempt), chunk).single()
+                        if (attempt.firstResponseMs == null && attempt.parts != base.parts) {
+                            attempt = attempt.copy(firstResponseMs = request.firstResponseElapsedMs?.invoke())
+                        }
                         preview(attempt.withStepStats(base, mark.elapsedNow()), newPartsFrom = base.parts.size)
                     } catch (e: CancellationException) {
                         throw e

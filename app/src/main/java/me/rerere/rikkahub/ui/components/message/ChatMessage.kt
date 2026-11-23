@@ -123,13 +123,19 @@ fun ChatMessage(
     onClearTranslation: (UIMessage) -> Unit = {},
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
+    previewRequest: (suspend () -> String)? = null,
 ) {
     val message = node.messages[node.selectIndex]
+    var showRequestInspection by remember(message.id) { mutableStateOf(false) }
+    if (showRequestInspection && previewRequest != null) {
+        RequestInspectionDialog(message, previewRequest, onDismiss = { showRequestInspection = false })
+    }
     if (message.isContextCheckpoint) {
         ChatMessageContextCheckpoint(
             message = message,
             onEdit = onEdit,
             onDelete = onDelete,
+            onViewRequest = previewRequest?.let { { showRequestInspection = true } },
             modifier = modifier,
         )
         return
@@ -256,6 +262,9 @@ fun ChatMessage(
             onDelete = onDelete,
             onShare = onShare,
             onFork = onFork,
+            onViewRequest = if (previewRequest != null && message.role == MessageRole.ASSISTANT) {
+                { showRequestInspection = true }
+            } else null,
             model = model,
             onSelectAndCopy = {
                 showSelectCopySheet = true
@@ -436,20 +445,36 @@ private fun MessagePartsBlock(
                                 }
                             } else {
                                 if (settings.displaySetting.showAssistantBubble) {
-                                    ChatMessageBubble(
-                                        role = role,
-                                        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = settings.displaySetting.bubbleOpacity),
-                                        modifier = Modifier.animateContentSize(),
-                                    ) {
-                                        MarkdownBlock(
-                                            content = part.text.replaceRegexes(
-                                                assistant = assistant,
-                                                scope = AssistantAffectScope.ASSISTANT,
-                                                visual = true,
-                                            ),
-                                            streaming = streamingText,
-                                            onClickCitation = handleClickCitation,
-                                        )
+                                    val content = part.text.replaceRegexes(
+                                        assistant = assistant,
+                                        scope = AssistantAffectScope.ASSISTANT,
+                                        visual = true,
+                                    )
+                                    val splitByParagraph = settings.displaySetting.splitAssistantBubbleByParagraph
+                                    // 拆成多个气泡只影响显示，消息本身还是一条
+                                    val paragraphs = remember(content, splitByParagraph) {
+                                        if (splitByParagraph) {
+                                            splitMarkdownParagraphs(content).ifEmpty { listOf(content) }
+                                        } else {
+                                            listOf(content)
+                                        }
+                                    }
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        paragraphs.fastForEachIndexed { index, paragraph ->
+                                            key(index) {
+                                                ChatMessageBubble(
+                                                    role = role,
+                                                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = settings.displaySetting.bubbleOpacity),
+                                                    modifier = Modifier.animateContentSize(),
+                                                ) {
+                                                    MarkdownBlock(
+                                                        content = paragraph,
+                                                        streaming = streamingText && index == paragraphs.lastIndex,
+                                                        onClickCitation = handleClickCitation,
+                                                    )
+                                                }
+                                            }
+                                        }
                                     }
                                 } else {
                                     MarkdownBlock(

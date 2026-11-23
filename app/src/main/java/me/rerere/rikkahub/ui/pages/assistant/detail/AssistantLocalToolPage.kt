@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
+import android.Manifest
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -16,15 +17,20 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.ui.toast.ToastType
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Calendar03
 import me.rerere.hugeicons.stroke.ChartLineData01
 import me.rerere.hugeicons.stroke.ClipboardPaste
 import me.rerere.hugeicons.stroke.Clock01
@@ -39,11 +45,15 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.phoneuse.PhoneUseManager
+import me.rerere.rikkahub.phoneuse.isPhoneUseCheckedInSystem
 import me.rerere.rikkahub.phoneuse.isFloatingChatWindowOn
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.CardGroupIcon
 import me.rerere.rikkahub.ui.components.ui.CardGroupScope
+import me.rerere.rikkahub.ui.components.ui.permission.PermissionInfo
+import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
+import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import me.rerere.rikkahub.ui.components.ui.switchItem
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
@@ -101,11 +111,37 @@ private fun AssistantLocalToolContent(
     val settingsStore: SettingsStore = koinInject()
     val phoneUseManager: PhoneUseManager = koinInject()
     val phoneUseServiceOn = phoneUseManager.controller.collectAsStateWithLifecycle().value != null
+    // 系统设置里勾选着但服务没连上：被系统停掉了，要关掉重开。从系统设置回来时重新读
+    var phoneUseCheckedInSystem by remember { mutableStateOf(isPhoneUseCheckedInSystem(context)) }
+    LifecycleResumeEffect(Unit) {
+        phoneUseCheckedInSystem = isPhoneUseCheckedInSystem(context)
+        onPauseOrDispose {}
+    }
+    val phoneUseServiceStopped = !phoneUseServiceOn && phoneUseCheckedInSystem
     val permissionRequiredText =
         stringResource(R.string.assistant_page_local_tools_screen_time_permission_required)
     val floatingWindowRequiredText =
         stringResource(R.string.assistant_page_local_tools_phone_use_floating_window_required)
     val enableServiceText = stringResource(R.string.assistant_page_local_tools_phone_use_enable_service)
+    val restartServiceText = stringResource(R.string.assistant_page_local_tools_phone_use_restart_service)
+
+    val calendarPermissionState = rememberPermissionState(
+        permissions = setOf(
+            PermissionInfo(
+                permission = Manifest.permission.READ_CALENDAR,
+                displayName = { Text(stringResource(R.string.permission_calendar_read)) },
+                usage = { Text(stringResource(R.string.permission_calendar_read_desc)) },
+                required = true
+            ),
+            PermissionInfo(
+                permission = Manifest.permission.WRITE_CALENDAR,
+                displayName = { Text(stringResource(R.string.permission_calendar_write)) },
+                usage = { Text(stringResource(R.string.permission_calendar_write_desc)) },
+                required = true
+            ),
+        )
+    )
+    PermissionManager(permissionState = calendarPermissionState)
 
     fun toggleLocalTool(option: LocalToolOption, enabled: Boolean) {
         // 没有悬浮窗就看不到 AI 在做什么、也不方便随时停下，先去把它打开，这次不开启工具
@@ -118,12 +154,19 @@ private fun AssistantLocalToolContent(
         }
         // 无障碍服务还没开时带用户去系统设置，开关照常打开，开完服务就能用
         if (enabled && option == LocalToolOption.PhoneUse && !phoneUseServiceOn) {
-            toaster.show(message = enableServiceText, type = ToastType.Warning)
+            toaster.show(
+                message = if (phoneUseServiceStopped) restartServiceText else enableServiceText,
+                type = ToastType.Warning,
+            )
             context.openAccessibilitySettings()
         }
         if (enabled && option == LocalToolOption.ScreenTime && !context.hasUsageStatsPermission()) {
             toaster.show(message = permissionRequiredText, type = ToastType.Warning)
             context.openUsageAccessSettings()
+        }
+        if (enabled && option == LocalToolOption.Calendar && !calendarPermissionState.allPermissionsGranted) {
+            calendarPermissionState.requestPermissions()
+            return
         }
         val newLocalTools = if (enabled) {
             assistant.localTools + option
@@ -224,6 +267,12 @@ private fun AssistantLocalToolContent(
                 description = R.string.assistant_page_local_tools_screen_time_desc,
             )
             toolItem(
+                option = LocalToolOption.Calendar,
+                icon = HugeIcons.Calendar03,
+                title = R.string.assistant_page_local_tools_calendar_title,
+                description = R.string.assistant_page_local_tools_calendar_desc,
+            )
+            toolItem(
                 option = LocalToolOption.ChartDisplay,
                 icon = HugeIcons.ChartLineData01,
                 title = R.string.assistant_page_local_tools_chart_display_title,
@@ -241,7 +290,13 @@ private fun AssistantLocalToolContent(
                             // 开了工具但服务没开时模型调用会直接报错，在这里说明原因
                             if (LocalToolOption.PhoneUse in assistant.localTools && !phoneUseServiceOn) {
                                 Text(
-                                    text = stringResource(R.string.assistant_page_local_tools_phone_use_service_off),
+                                    text = stringResource(
+                                        if (phoneUseServiceStopped) {
+                                            R.string.assistant_page_local_tools_phone_use_service_stopped
+                                        } else {
+                                            R.string.assistant_page_local_tools_phone_use_service_off
+                                        }
+                                    ),
                                     color = MaterialTheme.colorScheme.error,
                                 )
                             }

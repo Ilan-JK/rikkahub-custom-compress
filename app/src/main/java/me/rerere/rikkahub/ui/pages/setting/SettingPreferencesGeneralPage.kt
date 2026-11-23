@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -18,18 +19,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlin.math.roundToInt
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.AUTO_COMPRESS_THRESHOLD_RANGE
-import me.rerere.ai.ui.ContextSummaryMode
-import me.rerere.rikkahub.data.datastore.AutoCompressionTrigger
-import me.rerere.rikkahub.data.datastore.CompressionRangeMode
-import me.rerere.rikkahub.ui.components.ai.CompressionNumberField
-import me.rerere.rikkahub.ui.components.ai.CompressionRangeEditor
 import me.rerere.rikkahub.data.datastore.BackgroundEffectType
+import me.rerere.rikkahub.data.datastore.CompressionTrigger
 import me.rerere.rikkahub.data.datastore.DisplaySetting
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
@@ -46,6 +44,13 @@ import org.koin.androidx.compose.koinViewModel
 fun SettingPreferencesGeneralPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     var displaySetting by remember(settings) { mutableStateOf(settings.displaySetting) }
+    var showCompressionOptions by remember { mutableStateOf(false) }
+    if (showCompressionOptions) {
+        CompressionOptionsDialog(settings.compression, onDismiss = { showCompressionOptions = false }) { options ->
+            vm.updateSettings { it.copy(compression = options) }
+            showCompressionOptions = false
+        }
+    }
     var ttsPlaybackSpeed by remember(settings.defaultTTSPlaybackSpeed) {
         mutableFloatStateOf(settings.defaultTTSPlaybackSpeed)
     }
@@ -106,67 +111,45 @@ fun SettingPreferencesGeneralPage(vm: SettingVM = koinViewModel()) {
                         onCheckedChange = {
                             vm.updateSettings { latest -> latest.copy(enableAutoCompress = it) }
                         },
-                        supportingContent = { Text("与助手的上下文信息数量限制互斥") },
+                        supportingContent = {
+                            Text(
+                                if (settings.compression.trigger == CompressionTrigger.MessageCount) {
+                                    stringResource(R.string.compression_count_description, settings.compression.messageThreshold)
+                                } else {
+                                    stringResource(R.string.setting_display_page_auto_compress_desc)
+                                }
+                            )
+                        },
                         headlineContent = { Text(stringResource(R.string.setting_display_page_auto_compress_title)) },
                     )
-                    if (settings.enableAutoCompress) {
-                        formItem(headlineContent = { Text("触发条件") }) {
-                            ConnectedChoiceButtons(
-                                options = AutoCompressionTrigger.entries,
-                                selected = settings.compression.trigger,
-                                onSelect = { trigger ->
-                                    vm.updateSettings { it.copy(compression = it.compression.copy(trigger = trigger)) }
+                    if (settings.enableAutoCompress && settings.compression.trigger == CompressionTrigger.Context) {
+                        formItem(
+                            headlineContent = { Text(stringResource(R.string.setting_display_page_auto_compress_threshold_title)) },
+                            supportingContent = { Text(stringResource(R.string.setting_display_page_auto_compress_threshold_desc)) },
+                            trailingContent = {
+                                CardGroupValue("${(settings.autoCompressThreshold * 100).roundToInt()}%")
+                            },
+                        ) {
+                            Slider(
+                                value = settings.autoCompressThreshold,
+                                onValueChange = {
+                                    // 按 5% 取整，避免浮点误差存成 0.79999995 之类的值
+                                    val value = (it * 20).roundToInt() / 20f
+                                    vm.updateSettings { latest -> latest.copy(autoCompressThreshold = value) }
                                 },
-                            ) { trigger, selected ->
-                                ConnectedChoiceLabel(if (trigger == AutoCompressionTrigger.TOKEN_RATIO) "Token 比例触发" else "信息条数触发", selected)
-                            }
-                        }
-                        if (settings.compression.trigger == AutoCompressionTrigger.MESSAGE_COUNT) {
-                            formItem(headlineContent = { Text("信息条数触发") }) {
-                                CompressionNumberField(settings.compression.messageThreshold, 1, "未压缩信息数") { count ->
-                                    vm.updateSettings { it.copy(compression = it.compression.copy(messageThreshold = count)) }
-                                }
-                                if (settings.compression.automaticRange.mode == CompressionRangeMode.KEEP_RECENT &&
-                                    settings.compression.automaticRange.keepRecentCount >= settings.compression.messageThreshold
-                                ) {
-                                    Text("保留数不小于触发数，达到阈值时可能没有可压缩的信息。", color = androidx.compose.material3.MaterialTheme.colorScheme.error)
-                                }
-                            }
-                        } else {
-                            formItem(
-                                headlineContent = { Text(stringResource(R.string.setting_display_page_auto_compress_threshold_title)) },
-                                supportingContent = { Text(stringResource(R.string.setting_display_page_auto_compress_threshold_desc)) },
-                                trailingContent = {
-                                    CardGroupValue("${(settings.autoCompressThreshold * 100).roundToInt()}%")
-                                },
-                            ) {
-                                Slider(
-                                    value = settings.autoCompressThreshold,
-                                    onValueChange = {
-                                        val value = (it * 20).roundToInt() / 20f
-                                        vm.updateSettings { latest -> latest.copy(autoCompressThreshold = value) }
-                                    },
-                                    valueRange = AUTO_COMPRESS_THRESHOLD_RANGE,
-                                    steps = 8,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            }
-                        }
-                        formItem(headlineContent = { Text("自动压缩范围") }) {
-                            CompressionRangeEditor(settings.compression.automaticRange) { range ->
-                                vm.updateSettings { it.copy(compression = it.compression.copy(automaticRange = range)) }
-                            }
+                                valueRange = AUTO_COMPRESS_THRESHOLD_RANGE,
+                                steps = 8,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
                         }
                     }
-                    formItem(headlineContent = { Text("摘要读取方式") }) {
-                        ConnectedChoiceButtons(
-                            options = ContextSummaryMode.entries,
-                            selected = settings.compression.summaryMode,
-                            onSelect = { mode -> vm.updateSettings { it.copy(compression = it.compression.copy(summaryMode = mode)) } },
-                        ) { mode, selected ->
-                            ConnectedChoiceLabel(if (mode == ContextSummaryMode.LATEST) "仅读最新摘要" else "多个摘要共同读取", selected)
-                        }
-                    }
+                    item(
+                        onClick = { showCompressionOptions = true },
+                        headlineContent = { Text(stringResource(R.string.compression_options)) },
+                        trailingContent = {
+                            Icon(painterResource(R.drawable.ic_disclosure_triangle), contentDescription = null)
+                        },
+                    )
                 }
             }
 

@@ -54,17 +54,20 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import kotlin.math.roundToInt
 import kotlin.uuid.Uuid
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
+import me.rerere.rikkahub.data.model.getChatModelOf
 import me.rerere.rikkahub.data.model.withConversation
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.message.ChatMessage
 import me.rerere.rikkahub.ui.components.ui.ErrorCardsDisplay
 import me.rerere.rikkahub.ui.hooks.ImeLazyListAutoScroller
+import me.rerere.rikkahub.ui.pages.quickstart.QuickStartCard
 import me.rerere.rikkahub.ui.theme.ChatFontProvider
 import me.rerere.rikkahub.utils.plus
 import me.rerere.ui.components.ListSelectableItem
@@ -294,6 +297,10 @@ private fun ChatListNormal(
             .associateBy { it.id }
     }
     val lastMessageIndex = conversation.messageNodes.lastIndex
+    // 流式输出时会频繁重组，只在相关配置变了才重新查找模型
+    val needsSetup = remember(settings.init, settings.providers, settings.chatModelId, settings.assistants, conversation.assistantId, conversation.config) {
+        !settings.init && settings.getChatModelOf(conversation) == null
+    }
 
     Box(
         modifier = Modifier
@@ -315,9 +322,14 @@ private fun ChatListNormal(
         }
 
         // 判断最近是否滚动
-        LaunchedEffect(state) {
-            observeRecentScroll(snapshotFlow { state.isScrollInProgress }) {
-                isRecentScroll = it
+        LaunchedEffect(state.isScrollInProgress) {
+            if (state.isScrollInProgress) {
+                isRecentScroll = true
+                delay(1500)
+                isRecentScroll = false
+            } else {
+                delay(1500)
+                isRecentScroll = false
             }
         }
 
@@ -353,8 +365,14 @@ private fun ChatListNormal(
                         selectedKeys = selectedItems,
                         enabled = selectionState.selecting,
                     ) {
+                        val chatService = org.koin.compose.koinInject<me.rerere.rikkahub.service.ChatService>()
                         ChatMessage(
                             node = node,
+                            previewRequest = if (node.currentMessage.isContextCheckpoint ||
+                                node.currentMessage.role == me.rerere.ai.core.MessageRole.ASSISTANT
+                            ) {
+                                { chatService.previewMessageRequest(conversation, node.currentMessage) }
+                            } else null,
                             model = node.currentMessage.modelId?.let(modelById::get)
                                 ?: node.currentMessage.snapshotModel(),
                             assistant = assistant,
@@ -425,6 +443,13 @@ private fun ChatListNormal(
                             )
                         }
                     }
+                }
+            }
+
+            // 没有可用模型就发不了消息，放在消息后面，空会话时在顶部、有消息时贴着输入框
+            if (needsSetup) {
+                item(key = "QuickStartCard") {
+                    QuickStartCard(modifier = Modifier.animateItem())
                 }
             }
 
