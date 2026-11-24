@@ -339,9 +339,37 @@ class ChatRequestFactory(
                 replayAllForTools = turn.providerSetting.replaysReasoningAcrossToolTurns(params),
                 allowReasoning = (turn.providerSetting as? ProviderSetting.OpenAI)
                     ?.let { it.useResponseApi || it.includeHistoryReasoning } ?: true,
-            ),
+            ).let { trimmed ->
+                if (compression?.readAllSummaries == true) {
+                    trimmed.wrapUncompressedMessages(trailingInstruction = !compression.systemInstruction)
+                } else trimmed
+            },
             params,
         )
+    }
+}
+
+/** Mark the full uncovered-history block without changing its message roles or tool parts. */
+internal fun List<UIMessage>.wrapUncompressedMessages(trailingInstruction: Boolean = false): List<UIMessage> {
+    val history = if (trailingInstruction) dropLast(1) else this
+    val first = history.indexOfFirst { !it.isContextCheckpoint && !it.isSynthetic && it.role != MessageRole.SYSTEM }
+    if (first < 0) return this
+    val last = history.indexOfLast { !it.isContextCheckpoint && !it.isSynthetic && it.role != MessageRole.SYSTEM }
+
+    return mapIndexed { index, message ->
+        if (index != first && index != last) return@mapIndexed message
+        val parts = message.parts.toMutableList()
+        if (index == first) {
+            val text = parts.firstOrNull() as? UIMessagePart.Text
+            if (text == null) parts.add(0, UIMessagePart.Text("<uncompressed_messages>\n"))
+            else parts[0] = text.copy(text = "<uncompressed_messages>\n${text.text}")
+        }
+        if (index == last) {
+            val text = parts.lastOrNull() as? UIMessagePart.Text
+            if (text == null) parts.add(UIMessagePart.Text("\n</uncompressed_messages>"))
+            else parts[parts.lastIndex] = text.copy(text = "${text.text}\n</uncompressed_messages>")
+        }
+        message.copy(parts = parts)
     }
 }
 

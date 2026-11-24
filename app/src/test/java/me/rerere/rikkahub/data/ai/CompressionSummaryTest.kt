@@ -101,4 +101,57 @@ class CompressionSummaryTest {
         assertEquals(currentReply, sent.last())
         assertEquals(history, history.trimRequestReasoning(keepCurrentToolTurn = true, replayAllForTools = true))
     }
+
+    @Test
+    fun `all summaries mode wraps the uncovered history and leaves summaries and roles intact`() {
+        val olderSummary = reply(UIMessagePart.Text("Older summary")).copy(isContextCheckpoint = true)
+        val latestSummary = reply(UIMessagePart.Text("Latest summary")).copy(isContextCheckpoint = true)
+        val user = UIMessage.user("Look this up")
+        val assistant = reply(UIMessagePart.Text("Here is the result"))
+        val instruction = UIMessage.user("Summarize the conversation")
+        val history = listOf(olderSummary, latestSummary, user, assistant, instruction)
+
+        val wrapped = history.wrapUncompressedMessages(trailingInstruction = true)
+
+        assertEquals(listOf(olderSummary, latestSummary), wrapped.take(2))
+        assertEquals("<uncompressed_messages>\nLook this up", wrapped[2].toText())
+        assertEquals("Here is the result\n</uncompressed_messages>", wrapped[3].toText())
+        assertEquals(instruction, wrapped[4])
+        assertEquals(history.map { it.role }, wrapped.map { it.role })
+    }
+
+    @Test
+    fun `single uncovered message gets both wrapper tags`() {
+        val message = UIMessage.user("A standalone message")
+
+        val wrapped = listOf(message).wrapUncompressedMessages().single()
+
+        assertEquals(
+            listOf(
+                UIMessagePart.Text("<uncompressed_messages>\nA standalone message\n</uncompressed_messages>"),
+            ),
+            wrapped.parts,
+        )
+        assertEquals(message.role, wrapped.role)
+    }
+
+    @Test
+    fun `empty uncovered history remains unchanged`() {
+        val summary = reply(UIMessagePart.Text("Only summary")).copy(isContextCheckpoint = true)
+
+        assertEquals(listOf(summary), listOf(summary).wrapUncompressedMessages())
+    }
+
+    @Test
+    fun wrappingSanitizedHistoryPreservesToolCallsAndTheirOutput() {
+        val tool = UIMessagePart.Tool(toolCallId = "call_1", toolName = "lookup", input = "{}",
+            output = listOf(UIMessagePart.Text("Lookup result")))
+        val history = listOf(reply(UIMessagePart.Text("<think>planning</think>"), tool))
+
+        val wrapped = history.trimRequestReasoning(keepCurrentToolTurn = false).wrapUncompressedMessages().single()
+
+        assertEquals(listOf(tool), wrapped.getTools())
+        assertEquals("<uncompressed_messages>\n", (wrapped.parts.first() as UIMessagePart.Text).text)
+        assertEquals("\n</uncompressed_messages>", (wrapped.parts.last() as UIMessagePart.Text).text)
+    }
 }
