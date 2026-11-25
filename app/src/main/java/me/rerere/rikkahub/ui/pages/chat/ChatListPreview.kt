@@ -54,6 +54,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.checkpointOwners
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Attachment01
 import me.rerere.hugeicons.stroke.Cancel01
@@ -98,17 +99,22 @@ private data class PreviewRound(
     val favorite: Boolean,
     // 压缩检查点单独成一张卡片，userText 是摘要
     val checkpoint: Boolean,
+    val coveredBy: Uuid?,
 ) {
     fun matches(query: String): Boolean =
         userText.contains(query, ignoreCase = true) || replyText.contains(query, ignoreCase = true)
 }
 
 private fun List<MessageNode>.toPreviewRounds(): List<PreviewRound> {
+    val owners = map { it.currentMessage }.checkpointOwners()
     val groups = mutableListOf<MutableList<IndexedValue<MessageNode>>>()
     forEachIndexed { index, node ->
         // 检查点本身是 USER 消息会自己开一组；它后面的节点也要另起一组，不能并进检查点卡片
-        val afterCheckpoint = groups.lastOrNull()?.last()?.value?.currentMessage?.isContextCheckpoint == true
-        if (node.currentMessage.role == MessageRole.USER || groups.isEmpty() || afterCheckpoint) {
+        val previous = groups.lastOrNull()?.last()?.value?.currentMessage
+        val message = node.currentMessage
+        if (message.role == MessageRole.USER || previous == null || previous.isContextCheckpoint ||
+            owners[previous.id] != owners[message.id]
+        ) {
             groups.add(mutableListOf())
         }
         groups.last().add(IndexedValue(index, node))
@@ -127,6 +133,7 @@ private fun List<MessageNode>.toPreviewRounds(): List<PreviewRound> {
             replyParts = replies.flatMap { it.parts },
             favorite = group.any { it.value.isFavorite },
             checkpoint = user?.isContextCheckpoint == true,
+            coveredBy = owners[group.first().value.currentMessage.id],
         )
     }
 }
@@ -294,24 +301,40 @@ private data class MapRow(
 }
 
 private fun List<PreviewRound>.toMapGroups(): List<MapRow> {
-    val lastCheckpoint = indexOfLast { it.checkpoint }
-    if (lastCheckpoint < 0) return map { MapRow(it) }
-    val compressed = mutableListOf<MapRow>()
-    var covered = mutableListOf<MapRow>()
-    for (round in take(lastCheckpoint + 1)) {
-        if (round.checkpoint) {
-            if (covered.isNotEmpty()) compressed += MapRow(covered.first().round, MapRowKind.Covered, covered)
-            covered = mutableListOf()
-            compressed += MapRow(round)
-        } else {
-            covered += MapRow(round)
-        }
-    }
     return buildList {
-        if (compressed.count { it.round.checkpoint } > 1) {
-            add(MapRow(compressed.first { it.round.checkpoint }.round, MapRowKind.Summaries, compressed))
-        } else addAll(compressed)
-        addAll(this@toMapGroups.drop(lastCheckpoint + 1).map { MapRow(it) })
+        val compressed = mutableListOf<MapRow>()
+        val covered = mutableListOf<MapRow>()
+        fun flushCovered() {
+            if (covered.isEmpty()) return
+            compressed += MapRow(covered.first().round, MapRowKind.Covered, covered.toList())
+            covered.clear()
+        }
+        fun flushCompressed() {
+            flushCovered()
+            if (compressed.count { it.round.checkpoint } > 1) {
+                add(MapRow(compressed.first { it.round.checkpoint }.round, MapRowKind.Summaries, compressed.toList()))
+            } else {
+                addAll(compressed)
+            }
+            compressed.clear()
+        }
+        for (round in this@toMapGroups) {
+            when {
+                round.checkpoint -> {
+                    flushCovered()
+                    compressed += MapRow(round)
+                }
+                round.coveredBy != null -> {
+                    if (covered.lastOrNull()?.round?.coveredBy != round.coveredBy) flushCovered()
+                    covered += MapRow(round)
+                }
+                else -> {
+                    flushCompressed()
+                    add(MapRow(round))
+                }
+            }
+        }
+        flushCompressed()
     }
 }
 

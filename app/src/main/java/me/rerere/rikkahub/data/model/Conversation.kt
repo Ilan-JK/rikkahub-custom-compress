@@ -6,9 +6,13 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
+import me.rerere.ai.ui.ContextCheckpointCoverage
 import me.rerere.ai.ui.ModelSnapshot
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.checkpointOwners
+import me.rerere.ai.ui.contextCheckpoints
+import me.rerere.ai.ui.uncoveredContextIndices
 import me.rerere.ai.util.InstantSerializer
 import me.rerere.rikkahub.data.datastore.DEFAULT_ASSISTANT_ID
 import me.rerere.rikkahub.data.datastore.Settings
@@ -159,49 +163,97 @@ data class MessageNode(
 fun Conversation.lastContextTokens(): Int? {
     val messages = currentMessages
     val message = messages.lastOrNull { it.role == MessageRole.ASSISTANT } ?: return null
-    val checkpoint = messages.lastOrNull { it.isContextCheckpoint }
+    val checkpoint = messages.contextCheckpoints().lastOrNull()
     if (checkpoint != null && checkpoint.createdAt > message.createdAt) return null
     return message.contextTokens()
 }
 
-/** 在 [afterNodeId] 节点之后插入压缩检查点；该节点已不存在时返回 null。 */
-internal fun Conversation.uncompressedMessages(): List<UIMessage> =
-    currentMessages.drop(currentMessages.indexOfLast { it.isContextCheckpoint } + 1)
+internal fun Conversation.uncompressedMessages(readAllSummaries: Boolean = true): List<UIMessage> {
+    val messages = currentMessages
+    return messages.slice(messages.uncoveredContextIndices(readAllSummaries))
+}
+
+internal fun Conversation.compressionHistory(selected: List<UIMessage>, beforeSummaryId: Uuid? = null): List<UIMessage> {
+    val messages = withExplicitCheckpointCoverage().currentMessages
+    val included = selected.mapTo(hashSetOf()) { it.id }
+    val checkpoints = messages.contextCheckpoints().takeWhile { it.id != beforeSummaryId }
+    checkpoints.mapTo(included) { it.id }
+    return messages.filter { it.id in included }
+}
 
 internal fun UIMessage.countsForCompression(): Boolean =
     !isSynthetic && !isContextCheckpoint && !isNoticeOnly &&
         (role == MessageRole.USER || role == MessageRole.ASSISTANT) && isValidToUpload()
 
-internal fun compressionEndIndex(messages: List<UIMessage>, range: Int): Int {
-    val start = messages.indexOfLast { it.isContextCheckpoint } + 1
-    val eligible = messages.subList(start, messages.size)
-    val count = eligible.count { it.countsForCompression() }
+/** 正值只取最早的一段原文，负值从所有未覆盖原文中保留最近的条数。 */
+internal fun List<UIMessage>.compressionSelection(range: Int, readAllSummaries: Boolean): List<Int> {
+    val uncovered = uncoveredContextIndices(readAllSummaries)
+    val candidates = if (range > 0) {
+        val first = uncovered.indexOfFirst { this[it].countsForCompression() }
+        if (first < 0) return emptyList()
+        var start = first
+        while (start > 0 && uncovered[start - 1] + 1 == uncovered[start]) start--
+        var end = first + 1
+        while (end < uncovered.size && uncovered[end - 1] + 1 == uncovered[end]) end++
+        uncovered.subList(start, end)
+    } else uncovered
+
+    val count = candidates.count { this[it].countsForCompression() }
     val desired = when {
         range == 0 -> count
         range > 0 -> minOf(range, count)
         else -> (count.toLong() + range).coerceAtLeast(0).toInt()
     }
-    if (desired == 0) return start
-    if (desired == count) return messages.size
+    if (desired == 0) return emptyList()
+    if (desired == count) return candidates
+
     var seen = 0
-    val selected = eligible.indexOfFirst { it.countsForCompression() && ++seen == desired }
-    var end = start + selected + 1
-    // Keep standalone tool results with their preceding assistant message in older imports.
-    while (messages.getOrNull(end)?.role == MessageRole.TOOL) end++
-    return end
+    var boundary = candidates.indexOfFirst { this[it].countsForCompression() && ++seen == desired } + 1
+    // 旧版导入的独立工具结果与前面的助手消息一起压缩。
+    while (boundary < candidates.size && candidates[boundary - 1] + 1 == candidates[boundary] &&
+        this[candidates[boundary]].role == MessageRole.TOOL
+    ) boundary++
+    return candidates.take(boundary)
 }
 
+/** 旧摘要的范围在改变摘要位置或删掉摘要前固定下来。 */
+internal fun Conversation.withExplicitCheckpointCoverage(): Conversation {
+    var start = 0
+    val updated = messageNodes.mapIndexed { index, node ->
+        if (!node.currentMessage.isContextCheckpoint) return@mapIndexed node
+        val segmentStart = start
+        start = index + 1
+        val checkpoint = node.currentMessage
+        if (checkpoint.checkpointCoverage != null) return@mapIndexed node
+        val coverage = ContextCheckpointCoverage(messageNodes.messageIdsIn(segmentStart until index))
+        node.copy(messages = node.messages.toMutableList().also {
+            it[node.selectIndex] = checkpoint.copy(checkpointCoverage = coverage)
+        })
+    }
+    return if (updated == messageNodes) this else copy(messageNodes = updated)
+}
+
+private fun List<MessageNode>.messageIdsIn(indices: Iterable<Int>): Set<Uuid> =
+    indices.flatMapTo(mutableSetOf()) { index -> this[index].messages.map { it.id } }
+
 internal fun Conversation.insertContextCheckpoint(
-    afterNodeId: Uuid,
+    selectedIndices: List<Int>,
     summary: String,
     summaryId: Uuid = Uuid.random(),
-): Conversation? {
-    val index = messageNodes.indexOfFirst { it.id == afterNodeId }
-    if (index == -1) return null
-    val checkpoint = UIMessage.user(summary).copy(id = summaryId, isContextCheckpoint = true).toMessageNode()
+): Conversation {
+    val conversation = withExplicitCheckpointCoverage()
+    val nodes = conversation.messageNodes
+    val messages = conversation.currentMessages
+    val sequence = messages.contextCheckpoints().lastOrNull()?.checkpointCoverage?.sequence ?: 0
+    val covered = nodes.messageIdsIn(selectedIndices) - messages.checkpointOwners().keys
+    val checkpoint = UIMessage.user(summary).copy(
+        id = summaryId,
+        isContextCheckpoint = true,
+        checkpointCoverage = ContextCheckpointCoverage(covered, sequence + 1),
+    ).toMessageNode()
+    val end = selectedIndices.last() + 1
     return copy(
-        messageNodes =
-        messageNodes.subList(0, index + 1) + checkpoint + messageNodes.subList(index + 1, messageNodes.size),
+        messageNodes = nodes.subList(0, end) + checkpoint + nodes.subList(end, nodes.size),
     )
 }
 

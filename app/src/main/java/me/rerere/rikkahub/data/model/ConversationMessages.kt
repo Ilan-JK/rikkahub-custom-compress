@@ -15,7 +15,9 @@ internal fun Conversation.deleteMessage(messageId: Uuid): Conversation? {
     val targetNodeIndex = messageNodes.indexOfFirst { node -> node.messages.any { it.id == messageId } }
     if (targetNodeIndex == -1) return null
 
-    val updatedNodes = messageNodes.mapIndexedNotNull { index, node ->
+    val removesCheckpoint = messageNodes[targetNodeIndex].currentMessage.let { it.id == messageId && it.isContextCheckpoint }
+    val source = if (removesCheckpoint) withExplicitCheckpointCoverage() else this
+    val updatedNodes = source.messageNodes.mapIndexedNotNull { index, node ->
         if (index != targetNodeIndex) return@mapIndexedNotNull node
         val nextMessages = node.messages.filterNot { it.id == messageId }
         if (nextMessages.isEmpty()) return@mapIndexedNotNull null

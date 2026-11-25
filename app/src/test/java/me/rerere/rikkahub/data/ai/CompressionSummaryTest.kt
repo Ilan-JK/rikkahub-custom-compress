@@ -136,6 +136,21 @@ class CompressionSummaryTest {
     }
 
     @Test
+    fun `interleaved summary remains outside both uncovered blocks`() {
+        val earlier = UIMessage.user("Earlier")
+        val summary = UIMessage.user("Summary").copy(isContextCheckpoint = true)
+        val later = UIMessage.user("Later")
+        val instruction = UIMessage.user("Summarize the conversation")
+
+        val wrapped = listOf(earlier, summary, later, instruction).wrapUncompressedMessages(trailingInstruction = true)
+
+        assertEquals("<uncompressed_messages>\nEarlier\n</uncompressed_messages>", wrapped[0].toText())
+        assertEquals(summary, wrapped[1])
+        assertEquals("<uncompressed_messages>\nLater\n</uncompressed_messages>", wrapped[2].toText())
+        assertEquals(instruction, wrapped[3])
+    }
+
+    @Test
     fun `empty uncovered history remains unchanged`() {
         val summary = reply(UIMessagePart.Text("Only summary")).copy(isContextCheckpoint = true)
 

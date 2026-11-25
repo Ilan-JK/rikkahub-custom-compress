@@ -8,9 +8,9 @@
 
 ## 下载
 
-**[下载 ARM64 APK](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/download/3.3.1-custom-compress.6/RikkaHub-3.3.1-custom-compress.6-arm64.apk)** · [版本说明与源码资料](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/latest)
+**[下载 ARM64 APK](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/download/3.3.1-custom-compress.8/RikkaHub-3.3.1-custom-compress.8-arm64.apk)** · [版本说明与源码资料](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/latest)
 
-版本 `3.3.1-custom-compress.6`，16.47 MB（15.71 MiB），Android 8.0 及以上，ARM64。
+版本 `3.3.1-custom-compress.8`，16.47 MB（15.71 MiB），Android 8.0 及以上，ARM64。
 
 包名为 `me.rerere.rikkahub.debug`，使用独立签名，可与官方版并存，不能直接覆盖官方版。
 
@@ -21,7 +21,7 @@
 - 自动压缩可按上下文比例或未压缩消息条数触发。条数默认 50，只在会话空闲时触发。
 - 压缩范围默认 `0`，压缩全部可选消息。`+n` 压缩最早的 n 条，`-n` 保留最近的 n 条。
 - 可选择只读取最新摘要或读取全部摘要，并配置压缩指令角色和随请求发送的内容。
-- “读取全部”时，压缩请求会整体标注未压缩信息。
+- 删除摘要会释放它覆盖的原消息。“读取全部”按对话顺序发送，压缩请求逐段标注未压缩消息。“仅最新”从对话中的最后一条摘要开始。
 - 从右上角直接打开对话地图。已被摘要覆盖的原文默认折叠。
 - 消息菜单可查看请求内容。流式回复收到首包后，立即用统计栏的小字显示耗时。
 

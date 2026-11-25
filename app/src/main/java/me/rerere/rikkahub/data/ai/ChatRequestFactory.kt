@@ -301,6 +301,13 @@ class ChatRequestFactory(
             workspaceCwd = turn.workspaceCwd,
         ).expandNotices().let { prepared ->
             if (compressPrompt == null) prepared else {
+                val firstOriginal = prepared.indexOfFirst { it.isUncompressedRequestMessage() }
+                val lastSummary = prepared.indexOfLast { it.isContextCheckpoint }
+                val instruction = if (compression?.readAllSummaries == true && firstOriginal in 0 until lastSummary) {
+                    "$compressPrompt\n\nFor this request, summarize the messages inside all <uncompressed_messages> " +
+                        "blocks, wherever they appear relative to <compression_summary> blocks. " +
+                        "Use existing summaries only as background."
+                } else compressPrompt
                 val tagged = prepared.map { message ->
                     if (message.isContextCheckpoint) message.copy(
                         parts = listOf(UIMessagePart.Text("<compression_summary>\n${message.toText()}\n</compression_summary>"))
@@ -308,9 +315,9 @@ class ChatRequestFactory(
                 }
                 if (compression?.systemInstruction == true) {
                     val system = tagged.filter { it.role == MessageRole.SYSTEM }.map { it.toText() }
-                    listOf(UIMessage.system((system + compressPrompt).joinToString("\n\n")).copy(isSynthetic = true)) +
+                    listOf(UIMessage.system((system + instruction).joinToString("\n\n")).copy(isSynthetic = true)) +
                         tagged.filterNot { it.role == MessageRole.SYSTEM }
-                } else tagged + UIMessage.user(compressPrompt)
+                } else tagged + UIMessage.user(instruction)
             }
         }
         val params = TextGenerationParams(
@@ -349,22 +356,37 @@ class ChatRequestFactory(
     }
 }
 
-/** Mark the full uncovered-history block without changing its message roles or tool parts. */
+private fun UIMessage.isUncompressedRequestMessage(): Boolean =
+    !isContextCheckpoint && !isSynthetic && role != MessageRole.SYSTEM
+
+/** Mark each run of uncovered messages so intervening summaries stay outside the tags. */
 internal fun List<UIMessage>.wrapUncompressedMessages(trailingInstruction: Boolean = false): List<UIMessage> {
-    val history = if (trailingInstruction) dropLast(1) else this
-    val first = history.indexOfFirst { !it.isContextCheckpoint && !it.isSynthetic && it.role != MessageRole.SYSTEM }
-    if (first < 0) return this
-    val last = history.indexOfLast { !it.isContextCheckpoint && !it.isSynthetic && it.role != MessageRole.SYSTEM }
+    val historySize = size - if (trailingInstruction) 1 else 0
+    val starts = hashSetOf<Int>()
+    val ends = hashSetOf<Int>()
+    var lastOriginal: Int? = null
+    for (index in 0 until historySize) {
+        val message = this[index]
+        if (message.isContextCheckpoint) {
+            lastOriginal?.let { ends.add(it) }
+            lastOriginal = null
+        } else if (message.isUncompressedRequestMessage()) {
+            if (lastOriginal == null) starts.add(index)
+            lastOriginal = index
+        }
+    }
+    lastOriginal?.let { ends.add(it) }
+    if (starts.isEmpty()) return this
 
     return mapIndexed { index, message ->
-        if (index != first && index != last) return@mapIndexed message
+        if (index !in starts && index !in ends) return@mapIndexed message
         val parts = message.parts.toMutableList()
-        if (index == first) {
+        if (index in starts) {
             val text = parts.firstOrNull() as? UIMessagePart.Text
             if (text == null) parts.add(0, UIMessagePart.Text("<uncompressed_messages>\n"))
             else parts[0] = text.copy(text = "<uncompressed_messages>\n${text.text}")
         }
-        if (index == last) {
+        if (index in ends) {
             val text = parts.lastOrNull() as? UIMessagePart.Text
             if (text == null) parts.add(UIMessagePart.Text("\n</uncompressed_messages>"))
             else parts[parts.lastIndex] = text.copy(text = "${text.text}\n</uncompressed_messages>")

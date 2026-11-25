@@ -35,8 +35,9 @@ data class UIMessage(
     val stepCount: Int? = null,
     val firstResponseMs: Long? = null,
     val translation: String? = null,
-    // 压缩检查点：此消息是它之前全部历史的摘要，组装请求时从最后一个检查点开始取
+    // 压缩检查点标记，兼容没有独立覆盖范围的旧摘要。
     val isContextCheckpoint: Boolean = false,
+    val checkpointCoverage: ContextCheckpointCoverage? = null,
     // 请求期间生成的内部消息；该标记仅在内存中使用
     @Transient
     val isSynthetic: Boolean = false,
@@ -185,20 +186,52 @@ fun List<UIMessagePart>.isEmptyUIMessage(): Boolean {
  */
 private const val CONTEXT_KEEP_RATIO = 0.5f
 
+@Serializable
+data class ContextCheckpointCoverage(
+    val messageIds: Set<Uuid>,
+    // 记录生成顺序，用于重建旧压缩请求的摘要背景。
+    val sequence: Long = 0,
+)
+
+fun List<UIMessage>.contextCheckpoints(): List<UIMessage> =
+    filter { it.isContextCheckpoint }.sortedBy { it.checkpointCoverage?.sequence ?: 0 }
+
+/** 旧摘要的直接覆盖范围始于上一条摘要之后。 */
+fun List<UIMessage>.checkpointOwners(): Map<Uuid, Uuid> = buildMap {
+    var start = 0
+    this@checkpointOwners.forEachIndexed { index, message ->
+        if (!message.isContextCheckpoint) return@forEachIndexed
+        val coverage = message.checkpointCoverage
+        if (coverage == null) {
+            for (coveredIndex in start until index) put(this@checkpointOwners[coveredIndex].id, message.id)
+        } else {
+            for (id in coverage.messageIds) put(id, message.id)
+        }
+        start = index + 1
+    }
+}
+
+fun List<UIMessage>.uncoveredContextIndices(readAllSummaries: Boolean): List<Int> {
+    val start = if (readAllSummaries) 0 else indexOfLast { it.isContextCheckpoint } + 1
+    val owners = checkpointOwners()
+    return (start until size).filter { !this[it].isContextCheckpoint && this[it].id !in owners }
+}
+
 /**
  * 截取实际发送给模型的上下文
  *
- * 先丢弃最后一个压缩检查点之前的消息(它们只保留给用户查看), 再按 [limit] 限制条数。
- * 检查点本身是被压缩历史的唯一来源, 始终保留, 条数限制只作用于它之后的消息。
+ * 摘要按设置读取，条数限制只作用于尚未被任何摘要覆盖的原消息。
  *
  * @param limit 触发截断的消息条数上限, 小于等于 0 表示不限制
  */
 fun List<UIMessage>.limitContext(limit: Int, readAllSummaries: Boolean = false): List<UIMessage> {
-    val checkpointIndex = indexOfLast { it.isContextCheckpoint }
-    if (checkpointIndex < 0) return limitMessageCount(limit)
-    val summaries = if (readAllSummaries) take(checkpointIndex + 1).filter { it.isContextCheckpoint }
-        else listOf(this[checkpointIndex])
-    return summaries + subList(checkpointIndex + 1, size).limitMessageCount(limit)
+    val lastCheckpoint = indexOfLast { it.isContextCheckpoint }
+    if (lastCheckpoint < 0) return limitMessageCount(limit)
+    val uncovered = slice(uncoveredContextIndices(readAllSummaries)).limitMessageCount(limit)
+    if (!readAllSummaries) return listOf(this[lastCheckpoint]) + uncovered
+
+    val retained = uncovered.mapTo(hashSetOf()) { it.id }
+    return filter { it.isContextCheckpoint || it.id in retained }
 }
 
 /**

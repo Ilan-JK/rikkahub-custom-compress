@@ -37,6 +37,8 @@ import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.checkpointOwners
+import me.rerere.ai.ui.contextCheckpoints
 import me.rerere.ai.ui.isEmptyInputMessage
 import me.rerere.common.android.Logging
 import me.rerere.rikkahub.AppScope
@@ -61,6 +63,9 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.bindConfig
 import me.rerere.rikkahub.data.model.cancelInterruptedTools
+import me.rerere.rikkahub.data.model.compressionHistory
+import me.rerere.rikkahub.data.model.compressionSelection
+import me.rerere.rikkahub.data.model.countsForCompression
 import me.rerere.rikkahub.data.model.deleteMessage
 import me.rerere.rikkahub.data.model.editMessage
 import me.rerere.rikkahub.data.model.fillModelSnapshots
@@ -69,8 +74,6 @@ import me.rerere.rikkahub.data.model.getAssistantOf
 import me.rerere.rikkahub.data.model.getChatModelOf
 import me.rerere.rikkahub.data.model.getStoredAssistantOf
 import me.rerere.rikkahub.data.model.insertContextCheckpoint
-import me.rerere.rikkahub.data.model.compressionEndIndex
-import me.rerere.rikkahub.data.model.countsForCompression
 import me.rerere.rikkahub.data.model.uncompressedMessages
 import me.rerere.rikkahub.data.datastore.CompressionTrigger
 import me.rerere.rikkahub.data.model.isAwaitingToolApproval
@@ -80,6 +83,7 @@ import me.rerere.rikkahub.data.model.replaceUserRegexes
 import me.rerere.rikkahub.data.model.selectBranch
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.model.withAssistantUpdate
+import me.rerere.rikkahub.data.model.withExplicitCheckpointCoverage
 import me.rerere.rikkahub.data.model.withNodeFavorite
 import me.rerere.rikkahub.data.model.withToolApproval
 import me.rerere.rikkahub.data.model.withTranslation
@@ -755,9 +759,10 @@ class ChatService(
                             if (message.id == session.autoCompressedReplyId) return@pause false
                             if (!reachesAutoCompressThreshold(turn.model, message.contextTokens())) return@pause false
                             val available = session.state.value.currentMessages
-                            if (compressionEndIndex(available, settings.compression.range) <=
-                                available.indexOfLast { it.isContextCheckpoint } + 1
-                            ) return@pause false
+                            val compression = settings.compression
+                            if (available.compressionSelection(compression.range, compression.readAllSummaries).isEmpty()) {
+                                return@pause false
+                            }
                             if (freshReply && (message.stepCount ?: 0) <= 1) {
                                 compressionUseless = true
                                 return@pause false
@@ -1008,13 +1013,12 @@ class ChatService(
                     if (!reachesAutoCompressThreshold(model, conversation.lastContextTokens())) return null
                 CompressionTrigger.MessageCount -> {
                     if (session.inbox.state.value.messages.isNotEmpty() || conversation.isAwaitingToolApproval) return null
-                    if (conversation.uncompressedMessages().count { it.countsForCompression() } <
+                    if (conversation.uncompressedMessages(compression.readAllSummaries).count { it.countsForCompression() } <
                         compression.messageThreshold.coerceAtLeast(1)
                     ) return null
                 }
             }
-            val messages = conversation.currentMessages
-            if (compressionEndIndex(messages, compression.range) <= messages.indexOfLast { it.isContextCheckpoint } + 1) {
+            if (conversation.currentMessages.compressionSelection(compression.range, compression.readAllSummaries).isEmpty()) {
                 return null
             }
 
@@ -1113,7 +1117,7 @@ class ChatService(
     }
 
     /**
-     * 把上一个检查点之后、最近 [keepRecentMessages] 条之前的消息压缩成摘要检查点。
+     * 按 [keepRecentMessages] 选择尚未被摘要覆盖的消息。
      * 只在占着任务槽的任务里调用：期间别的生成开始时会先取消它，提交时不用再检查是否在生成。
      */
     private suspend fun insertCompressionCheckpoint(
@@ -1125,11 +1129,10 @@ class ChatService(
     ) {
         val conversation = session.state.value
         val nodes = conversation.messageNodes
-        val checkpointIndex = nodes.indexOfLast { it.currentMessage.isContextCheckpoint }
-        // 压缩范围是 (checkpointIndex, endIndex)，之后的节点原样保留
-        val endIndex = compressionEndIndex(conversation.currentMessages, keepRecentMessages)
-        // 上一个检查点之后没有可压缩的消息
-        if (endIndex <= checkpointIndex + 1) {
+        val messages = conversation.currentMessages
+        val settings = settingsStore.awaitLoaded()
+        val selectedIndices = messages.compressionSelection(keepRecentMessages, settings.compression.readAllSummaries)
+        if (selectedIndices.isEmpty()) {
             throw IllegalStateException(
                 context.getString(
                     if (keepRecentMessages < 0) {
@@ -1140,18 +1143,18 @@ class ChatService(
                 )
             )
         }
-        // 未完成的工具调用没有结果，请求会被服务端拒绝；压到检查点之前也再不会执行。
-        // 保留区里的不发给压缩请求，压缩后照常留在检查点之后，不用检查
-        check(nodes.subList(checkpointIndex + 1, endIndex).none { node ->
-            node.currentMessage.getTools().any { it.isPending || it.canResumeExecution }
+        val selected = messages.slice(selectedIndices)
+        // 未完成的工具调用缺少结果，不能放进压缩请求。
+        check(selected.none { message ->
+            message.getTools().any { it.isPending || it.canResumeExecution }
         }) { context.getString(R.string.chat_page_compress_handle_pending_tools) }
 
         // 必须和对话用同一个模型、同一套请求组装，才能命中提示词缓存
-        val turn = requestFactory.createContext(settingsStore.awaitLoaded(), conversation, forCompression = true)
+        val turn = requestFactory.createContext(settings, conversation, forCompression = true)
         val summaryId = Uuid.random()
         val summary = requestFactory.generateCompressionSummary(
             turn = turn,
-            messages = conversation.currentMessages.take(endIndex),
+            messages = conversation.compressionHistory(selected),
             compressPrompt = buildCompressPrompt(
                 additionalPrompt = additionalPrompt,
                 locale = Locale.getDefault().displayName,
@@ -1162,19 +1165,19 @@ class ChatService(
             inspect = { RequestInspection.record(summaryId, it) },
         )
 
-        // 原消息原样保留，摘要插在压缩范围的最后一条消息之后。摘要生成期间对话可能已变化，
-        // 因此按节点定位插入到最新状态。
+        // 生成期间如果原文或作为背景发送的摘要被修改，就不保存这次压缩。
         session.update { latest ->
-            val snapshot = nodes.take(endIndex)
-            check(latest.messageNodes.take(endIndex) == snapshot) {
+            val latestMessages = latest.currentMessages
+            val end = selectedIndices.last() + 1
+            check(latest.messageNodes.take(end) == nodes.take(end) &&
+                latestMessages.contextCheckpoints() == messages.contextCheckpoints()
+            ) {
                 context.getString(R.string.chat_page_compress_conversation_changed)
             }
             val updated = latest.insertContextCheckpoint(
-                afterNodeId = nodes[endIndex - 1].id,
+                selectedIndices = selectedIndices,
                 summary = summary,
                 summaryId = summaryId,
-            ) ?: throw IllegalStateException(
-                context.getString(R.string.chat_page_compress_conversation_changed)
             )
             if (clearSuggestions) updated.copy(chatSuggestions = emptyList()) else updated
         }
@@ -1192,7 +1195,15 @@ class ChatService(
                 locale = Locale.getDefault().displayName,
                 mainPrompt = settings.compression.mainPrompt,
             ) else null
-            describeRequest(requestFactory.previewRequest(turn, conversation.currentMessages.take(index), prompt))
+            val history = if (message.isContextCheckpoint) {
+                val messages = conversation.withExplicitCheckpointCoverage().currentMessages
+                val owners = messages.checkpointOwners()
+                val selected = messages.filter { !it.isContextCheckpoint && owners[it.id] == message.id }
+                conversation.compressionHistory(selected, beforeSummaryId = message.id)
+            } else {
+                conversation.currentMessages.take(index)
+            }
+            describeRequest(requestFactory.previewRequest(turn, history, prompt))
         }
 
     // ---- 聊天页配置 ----
