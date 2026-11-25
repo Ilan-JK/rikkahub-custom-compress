@@ -298,6 +298,7 @@ private fun ChatPageContent(
     val toaster = LocalToaster.current
     val workspaceRepository: WorkspaceRepository = koinInject()
     val sessionActivity by vm.sessionActivity.collectAsStateWithLifecycle()
+    val conversationReady by vm.conversationReady.collectAsStateWithLifecycle()
 
     var previewMode by rememberSaveable { mutableStateOf(false) }
     val selectionState = rememberChatSelectionState()
@@ -445,6 +446,8 @@ private fun ChatPageContent(
             ChatList(
                 innerPadding = innerPadding,
                 conversation = conversation,
+                conversationReady = conversationReady,
+                onSummariesEnabledChange = vm::setSummariesEnabled,
                 state = chatListState,
                 previewListState = previewListState,
                 selectionState = selectionState,

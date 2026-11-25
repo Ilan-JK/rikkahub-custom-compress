@@ -1941,6 +1941,9 @@
   <string name="compression_range_hint">0: all; +n: oldest n; −n: keep newest n</string>
   <string name="compression_uncovered">%1$d uncompressed messages</string>
   <string name="compression_summary_count">%1$d summaries</string>
+  <string name="chat_page_summaries_enabled">Use conversation summaries</string>
+  <string name="chat_page_summaries_disabled">Conversation summaries are disabled</string>
+  <string name="chat_page_summaries_blocked_generating">Wait for the current task to finish before switching summaries</string>
   <string name="compression_covered_count">%1$d summarized messages</string>
   <string name="compression_incomplete">The model returned an incomplete summary. Try a smaller compression range.</string>
   <string name="compression_read_all">Read all summaries</string>

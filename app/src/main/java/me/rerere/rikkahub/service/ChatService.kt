@@ -84,6 +84,7 @@ import me.rerere.rikkahub.data.model.selectBranch
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.model.withAssistantUpdate
 import me.rerere.rikkahub.data.model.withExplicitCheckpointCoverage
+import me.rerere.rikkahub.data.model.summariesEnabled
 import me.rerere.rikkahub.data.model.withNodeFavorite
 import me.rerere.rikkahub.data.model.withToolApproval
 import me.rerere.rikkahub.data.model.withTranslation
@@ -729,7 +730,8 @@ class ChatService(
             // 它会挂起也可能失败，期间或失败后不能还指着上一轮的回复
             session.replyMessageId.value = target.continuedMessageId
             // 中途压缩把检查点插在回复之后；重新生成较早的消息时后面还有别的节点，不压缩
-            val canCompress = regenerateNodeId == null || conversation.messageNodes.lastOrNull()?.id == regenerateNodeId
+            val canCompress = conversation.summariesEnabled &&
+                (regenerateNodeId == null || conversation.messageNodes.lastOrNull()?.id == regenerateNodeId)
 
             val turn = requestFactory.createContext(settings, conversation)
             senderName = if (turn.assistant.useAssistantAvatar) {
@@ -958,6 +960,23 @@ class ChatService(
 
     // ---- 压缩对话历史 ----
 
+    suspend fun setSummariesEnabled(conversationId: Uuid, enabled: Boolean) {
+        withLoadedSession(conversationId) { session ->
+            val settings = settingsStore.awaitLoaded()
+            session.updateMetadata(
+                transform = { conversation ->
+                    check(session.getJob() == null) {
+                        context.getString(R.string.chat_page_summaries_blocked_generating)
+                    }
+                    val bound = conversation.bindConfig(settings)
+                    bound.copy(config = checkNotNull(bound.config).copy(summariesEnabled = enabled))
+                },
+                persist = conversationRepo::updateConversationConfig,
+            )
+            if (!session.existsInDatabase) session.flush()
+        }
+    }
+
     /**
      * 把上一个检查点之后的消息压缩成摘要检查点。
      *
@@ -975,6 +994,9 @@ class ChatService(
                 // 生成中的回复还没写完，压缩不到它，检查点也不能插到它前面。
                 // 等审批时允许压缩：保留区可以把待审批的工具留在检查点之后
                 check(session.getJob() == null) { context.getString(R.string.chat_page_compress_blocked_generating) }
+                check(session.state.value.summariesEnabled) {
+                    context.getString(R.string.chat_page_summaries_disabled)
+                }
                 launchCompressionJob(
                     session = session,
                     additionalPrompt = additionalPrompt,
@@ -1003,6 +1025,7 @@ class ChatService(
             if (!settings.enableAutoCompress || !session.isInitialized) return null
             if (!session.canStartNextTurn || session.inbox.state.value.paused) return null
             val conversation = session.state.value
+            if (!conversation.summariesEnabled) return null
             val reply = conversation.currentMessages.lastOrNull { it.role == MessageRole.ASSISTANT } ?: return null
             if (reply.id == session.autoCompressedReplyId) return null
             // 已经压缩过的话检查点在回复之后，这里取到的是 null
@@ -1128,6 +1151,7 @@ class ChatService(
         midTurn: Boolean = false,
     ) {
         val conversation = session.state.value
+        check(conversation.summariesEnabled) { context.getString(R.string.chat_page_summaries_disabled) }
         val nodes = conversation.messageNodes
         val messages = conversation.currentMessages
         val settings = settingsStore.awaitLoaded()

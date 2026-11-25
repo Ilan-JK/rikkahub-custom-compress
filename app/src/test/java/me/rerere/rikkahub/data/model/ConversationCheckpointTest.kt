@@ -11,6 +11,29 @@ import kotlin.uuid.Uuid
 
 class ConversationCheckpointTest {
     @Test
+    fun `disabled summaries restore all original messages and retain their coverage on reload`() {
+        val a = UIMessage.user("a")
+        val b = UIMessage.assistant("b")
+        val tail = UIMessage.user("tail")
+        val source = Conversation(
+            assistantId = Uuid.random(),
+            messageNodes = listOf(a, b, tail).map { it.toMessageNode() },
+        ).insertContextCheckpoint(listOf(0), "c1").insertContextCheckpoint(listOf(2), "c2")
+        val disabled = source.copy(config = ConversationConfig(summariesEnabled = false))
+        val reloaded = Json.decodeFromString<Conversation>(Json.encodeToString(disabled))
+        val originals = listOf(a, b, tail)
+
+        assertEquals(source.messageNodes, reloaded.messageNodes)
+        for (readAll in listOf(false, true)) {
+            assertEquals(originals, reloaded.uncompressedMessages(readAll))
+            assertEquals(originals, reloaded.currentMessages.limitContext(0, readAll, reloaded.summariesEnabled))
+        }
+        val enabled = reloaded.copy(config = ConversationConfig(summariesEnabled = true))
+        assertEquals(source.currentMessages.limitContext(0, true), enabled.currentMessages.limitContext(0, true, enabled.summariesEnabled))
+        assertEquals(listOf(tail), enabled.uncompressedMessages())
+    }
+
+    @Test
     fun `partial ranges do not cross the latest checkpoint`() {
         val old = UIMessage.user("covered")
         val checkpoint = UIMessage.user("summary").copy(isContextCheckpoint = true)

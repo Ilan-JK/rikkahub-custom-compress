@@ -13,10 +13,13 @@ import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.analytics.FirebaseAnalytics
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
@@ -97,6 +100,9 @@ class ChatVM(
         .getConversationJobs()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
+    private val _conversationReady = MutableStateFlow(false)
+    val conversationReady = _conversationReady.asStateFlow()
+
     init {
         // 添加对话引用
         chatService.addConversationReference(_conversationId)
@@ -104,6 +110,7 @@ class ChatVM(
         // 初始化对话
         viewModelScope.launch {
             chatService.initializeConversation(_conversationId)
+            _conversationReady.value = true
         }
 
         // 记住对话ID, 方便下次启动恢复
@@ -118,8 +125,7 @@ class ChatVM(
     }
 
     // 用户设置
-    val settings: StateFlow<Settings> =
-        settingsStore.settingsFlow.stateIn(viewModelScope, SharingStarted.Eagerly, Settings.dummy())
+    val settings: StateFlow<Settings> = settingsStore.settingsFlow
 
     // 流式输出时会话每个 chunk 都在变，助手和模型只取决于下面这几个字段
     private val configuredConversation = conversation.distinctUntilChanged { old, new ->
@@ -263,6 +269,18 @@ class ChatVM(
         return viewModelScope.launch {
             chatService.compressConversation(_conversationId, additionalPrompt, keepRecentMessages).onFailure {
                 chatService.addError(it, title = context.getString(R.string.error_title_compress_conversation))
+            }
+        }
+    }
+
+    fun setSummariesEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            try {
+                chatService.setSummariesEnabled(_conversationId, enabled)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                chatService.addError(e, _conversationId)
             }
         }
     }

@@ -76,6 +76,7 @@ import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.summariesEnabled
 import me.rerere.rikkahub.data.model.lastContextTokens
 import me.rerere.rikkahub.data.model.uncompressedMessages
 import me.rerere.rikkahub.data.model.countsForCompression
@@ -320,6 +321,7 @@ internal fun FilesPicker(
                     if (showCompress) {
                         SegmentedListItem(
                             onClick = { onShowCompressDialogChange(true) },
+                            enabled = conversation.summariesEnabled,
                             shapes = ListItemDefaults.segmentedShapes(index = itemIndex++, count = itemCount),
                             leadingContent = {
                                 Icon(
@@ -328,8 +330,8 @@ internal fun FilesPicker(
                                 )
                             },
                             trailingContent = {
-                                val contextTokens = remember(conversation.messageNodes) {
-                                    conversation.lastContextTokens()
+                                val contextTokens = remember(conversation.messageNodes, conversation.summariesEnabled) {
+                                    conversation.lastContextTokens().takeIf { conversation.summariesEnabled }
                                 }
                                 val countMode = settings.compression.trigger == CompressionTrigger.MessageCount
                                 val contextLength = chatModel?.contextLength?.takeIf { !countMode && it > 0 }
@@ -363,7 +365,10 @@ internal fun FilesPicker(
                                 }
                             },
                         ) {
-                            Text(stringResource(R.string.chat_page_compress_context))
+                            Text(stringResource(
+                                if (conversation.summariesEnabled) R.string.chat_page_compress_context
+                                else R.string.chat_page_summaries_disabled
+                            ))
                         }
                     }
                 }
@@ -384,7 +389,7 @@ internal fun FilesPicker(
     }
 
     // Compress Context Dialog
-    if (showCompressDialog) {
+    if (showCompressDialog && conversation.summariesEnabled) {
         CompressContextDialog(onDismiss = {
             onShowCompressDialogChange(false)
             onDismiss()

@@ -8,9 +8,9 @@
 
 ## 下載
 
-**[下載 ARM64 APK](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/download/3.3.1-custom-compress.8/RikkaHub-3.3.1-custom-compress.8-arm64.apk)** · [版本說明與原始碼資料](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/latest)
+**[下載 ARM64 APK](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/download/3.3.1-custom-compress.9/RikkaHub-3.3.1-custom-compress.9-arm64.apk)** · [版本說明與原始碼資料](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/latest)
 
-版本 `3.3.1-custom-compress.8`，16.47 MB（15.71 MiB），Android 8.0 及以上，ARM64。
+版本 `3.3.1-custom-compress.9`，16.47 MB（15.71 MiB），Android 8.0 及以上，ARM64。
 
 套件名稱為 `me.rerere.rikkahub.debug`，使用獨立簽章，可與官方版並存，不能直接覆蓋官方版。
 
@@ -22,7 +22,7 @@
 - 壓縮範圍預設為 `0`，壓縮所有可選訊息。`+n` 壓縮最早的 n 筆，`-n` 保留最近的 n 筆。
 - 可選擇只讀取最新摘要或讀取所有摘要，也可設定壓縮指令角色和隨請求傳送的內容。
 - 刪除摘要會釋放它涵蓋的原訊息。「讀取全部」依對話順序傳送，壓縮請求逐段標註未壓縮訊息。「僅最新」從對話中的最後一則摘要開始。
-- 從右上角直接開啟對話地圖。摘要涵蓋的原文預設摺疊。
+- 從右上角開啟對話地圖。關閉對話摘要後，原文會重新納入請求，目前的對話會暫停壓縮。重新開啟即可使用原有摘要。
 - 訊息選單可檢視請求內容。串流回覆收到第一個封包後，立即以統計列的小字顯示耗時。
 
 ## 為什麼說「恢復」

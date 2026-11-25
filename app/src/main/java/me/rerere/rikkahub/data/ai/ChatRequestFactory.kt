@@ -49,6 +49,7 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MemoryFile
 import me.rerere.rikkahub.data.model.getAssistantOf
 import me.rerere.rikkahub.data.model.getChatModelOf
+import me.rerere.rikkahub.data.model.summariesEnabled
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.data.repository.memoryId
@@ -73,6 +74,7 @@ class ChatTurnContext(
     val workspaceCwd: String?,
     val memories: List<MemoryFile>,
     val tools: List<Tool>,
+    val summariesEnabled: Boolean = true,
 )
 
 /** 把会话变成发给模型的请求：系统提示词、上下文裁剪、输入输出转换都在这里 */
@@ -126,6 +128,7 @@ class ChatRequestFactory(
                 conversationId = conversation.id,
                 workspaceCwd = conversation.workspaceCwd,
             ) else emptyList(),
+            summariesEnabled = conversation.summariesEnabled,
         )
     }
 
@@ -249,6 +252,9 @@ class ChatRequestFactory(
         compressPrompt: String? = null,
     ): StepRequest {
         val compression = turn.settings.compression.takeIf { compressPrompt != null }
+        // Historical compression previews still use the summaries that existed for that request.
+        val summariesEnabled = compression != null || turn.summariesEnabled
+        val toolPromptHistory = if (summariesEnabled) messages else messages.filterNot { it.isContextCheckpoint }
         val assistant = turn.assistant.copy(
             modeInjectionIds = if (compression?.modeInjections == false) emptySet() else turn.assistant.modeInjectionIds,
             lorebookIds = if (compression?.lorebooks == false) emptySet() else turn.assistant.lorebookIds,
@@ -273,7 +279,7 @@ class ChatRequestFactory(
                 // 工具prompt
                 turn.tools.forEach { tool ->
                     appendLine()
-                    append(tool.systemPrompt(turn.model, messages))
+                    append(tool.systemPrompt(turn.model, toolPromptHistory))
                 }
             }
             if (system.isNotBlank()) {
@@ -282,6 +288,7 @@ class ChatRequestFactory(
             val history = messages.limitContext(
                 if (compression == null) assistant.contextMessageLimit else 0,
                 turn.settings.compression.readAllSummaries,
+                summariesEnabled,
             )
             addAll(if (compression == null) history.withContinuationHint() else history)
         }.transforms(

@@ -26,7 +26,11 @@ data class ConversationConfig(
     val mcpServers: Set<Uuid> = emptySet(),
     val workspaceId: Uuid? = null,
     val enabledSkills: Set<String> = emptySet(),
+    val summariesEnabled: Boolean = true,
 )
+
+internal val Conversation.summariesEnabled: Boolean
+    get() = config?.summariesEnabled != false
 
 // 内置搜索是模型的开关，不在助手上，由调用方另行填入
 private fun Assistant.toConversationConfig() = ConversationConfig(
@@ -65,6 +69,7 @@ fun Conversation.withAssistantUpdate(updated: Assistant, settings: Settings): Co
     } else {
         copy(
             config = updated.toConversationConfig().copy(
+                summariesEnabled = config.summariesEnabled,
                 builtInSearch = if (updated.chatModelId == config.chatModelId) {
                     config.builtInSearch
                 } else {

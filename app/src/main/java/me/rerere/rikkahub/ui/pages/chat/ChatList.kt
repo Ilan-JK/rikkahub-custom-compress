@@ -87,6 +87,8 @@ fun ChatList(
     compressing: Boolean = false,
     processingStatus: String? = null,
     previewMode: Boolean,
+    conversationReady: Boolean,
+    onSummariesEnabledChange: (Boolean) -> Unit,
     onPreviewModeChange: (Boolean) -> Unit,
     settings: Settings,
     hazeState: HazeState,
@@ -144,6 +146,7 @@ fun ChatList(
             ChatListNormal(
                 innerPadding = innerPadding,
                 conversation = conversation,
+                conversationReady = conversationReady,
                 state = state,
                 loading = loading,
                 compressing = compressing,
@@ -186,6 +189,8 @@ fun ChatList(
                     listState = previewListState,
                     settings = settings,
                     hazeState = hazeState,
+                    canToggleSummaries = conversationReady && !loading,
+                    onSummariesEnabledChange = onSummariesEnabledChange,
                     onJumpToMessage = onJumpToMessage,
                 )
             }
@@ -216,6 +221,7 @@ internal fun Modifier.topFadingEdge(height: Dp): Modifier = this
 private fun ChatListNormal(
     innerPadding: PaddingValues,
     conversation: Conversation,
+    conversationReady: Boolean,
     state: LazyListState,
     loading: Boolean,
     compressing: Boolean,
@@ -298,8 +304,8 @@ private fun ChatListNormal(
     }
     val lastMessageIndex = conversation.messageNodes.lastIndex
     // 流式输出时会频繁重组，只在相关配置变了才重新查找模型
-    val needsSetup = remember(settings.init, settings.providers, settings.chatModelId, settings.assistants, conversation.assistantId, conversation.config) {
-        !settings.init && settings.getChatModelOf(conversation) == null
+    val needsSetup = remember(conversationReady, settings.init, settings.providers, settings.chatModelId, settings.assistants, conversation.assistantId, conversation.config) {
+        conversationReady && !settings.init && settings.getChatModelOf(conversation) == null
     }
 
     Box(
@@ -449,7 +455,7 @@ private fun ChatListNormal(
             // 没有可用模型就发不了消息，放在消息后面，空会话时在顶部、有消息时贴着输入框
             if (needsSetup) {
                 item(key = "QuickStartCard") {
-                    QuickStartCard(modifier = Modifier.animateItem())
+                    QuickStartCard()
                 }
             }
 

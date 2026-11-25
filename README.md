@@ -8,9 +8,9 @@ Context-compression customization based on RikkaHub 3.3.1, maintained by Ilan-JK
 
 ## Download
 
-**[Download ARM64 APK](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/download/3.3.1-custom-compress.8/RikkaHub-3.3.1-custom-compress.8-arm64.apk)** · [Release notes and source materials](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/latest)
+**[Download ARM64 APK](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/download/3.3.1-custom-compress.9/RikkaHub-3.3.1-custom-compress.9-arm64.apk)** · [Release notes and source materials](https://github.com/Ilan-JK/rikkahub-custom-compress/releases/latest)
 
-Version `3.3.1-custom-compress.8`, 16.47 MB (15.71 MiB), Android 8.0+, ARM64.
+Version `3.3.1-custom-compress.9`, 16.47 MB (15.71 MiB), Android 8.0+, ARM64.
 
 The package ID is `me.rerere.rikkahub.debug`, with a separate signing certificate, so it installs alongside the official app rather than replacing it.
 
@@ -22,7 +22,7 @@ Edit the main and mid-turn compression prompts under **Models and services → D
 - Set the compression range to `0` for all eligible messages, `+n` for the earliest n, or `-n` to keep the latest n.
 - Choose which summaries to read, the role of the compression instruction, and what to include in compression requests.
 - Deleting a summary releases the messages it covered. Read All preserves conversation order and marks each uncovered block in compression requests. Latest Only starts at the last summary in the conversation.
-- Open the conversation map from the top right. Messages covered by a summary are collapsed by default.
+- Open the conversation map from the top right. Turn off **Use conversation summaries** to restore covered messages to the request context and pause compression for that conversation. Turn it back on to reuse the saved summaries.
 - Inspect requests from the message menu. First-packet timing uses the compact stats style as soon as streaming starts.
 
 ## Why Restore It?

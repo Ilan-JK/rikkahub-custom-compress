@@ -170,6 +170,7 @@ fun Conversation.lastContextTokens(): Int? {
 
 internal fun Conversation.uncompressedMessages(readAllSummaries: Boolean = true): List<UIMessage> {
     val messages = currentMessages
+    if (!summariesEnabled) return messages.filterNot { it.isContextCheckpoint }
     return messages.slice(messages.uncoveredContextIndices(readAllSummaries))
 }
 

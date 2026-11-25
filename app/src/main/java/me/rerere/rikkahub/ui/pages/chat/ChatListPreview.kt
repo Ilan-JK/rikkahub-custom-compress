@@ -15,11 +15,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -36,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -70,6 +73,7 @@ import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
+import me.rerere.rikkahub.data.model.summariesEnabled
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.utils.plus
@@ -105,8 +109,8 @@ private data class PreviewRound(
         userText.contains(query, ignoreCase = true) || replyText.contains(query, ignoreCase = true)
 }
 
-private fun List<MessageNode>.toPreviewRounds(): List<PreviewRound> {
-    val owners = map { it.currentMessage }.checkpointOwners()
+private fun List<MessageNode>.toPreviewRounds(summariesEnabled: Boolean): List<PreviewRound> {
+    val owners = if (summariesEnabled) map { it.currentMessage }.checkpointOwners() else emptyMap()
     val groups = mutableListOf<MutableList<IndexedValue<MessageNode>>>()
     forEachIndexed { index, node ->
         // 检查点本身是 USER 消息会自己开一组；它后面的节点也要另起一组，不能并进检查点卡片
@@ -150,6 +154,8 @@ internal fun ChatListPreview(
     listState: LazyListState,
     settings: Settings,
     hazeState: HazeState,
+    canToggleSummaries: Boolean,
+    onSummariesEnabledChange: (Boolean) -> Unit,
     onJumpToMessage: (Int) -> Unit,
 ) {
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -158,10 +164,13 @@ internal fun ChatListPreview(
     // 长对话里逐条做正则清洗很慢，放到后台算；没算完时为 null。
     // 生成中节点每个 chunk 都在变，conflate 掉中间状态，只算最新的
     val nodes by rememberUpdatedState(conversation.messageNodes)
+    val summariesEnabled by rememberUpdatedState(conversation.summariesEnabled)
     val loadedRounds by produceState<List<PreviewRound>?>(initialValue = null) {
-        snapshotFlow { nodes }
+        snapshotFlow { nodes to summariesEnabled }
             .conflate()
-            .collect { value = withContext(Dispatchers.Default) { it.toPreviewRounds() } }
+            .collect { (nodes, enabled) ->
+                value = withContext(Dispatchers.Default) { nodes.toPreviewRounds(enabled) }
+            }
     }
     val rounds = loadedRounds.orEmpty()
     var expandedGroups by remember { mutableStateOf(setOf<Uuid>()) }
@@ -201,7 +210,7 @@ internal fun ChatListPreview(
 
     // 搜索框浮在列表上方固定不动；列表顶部留白放进 contentPadding，内容能滚到搜索框和透明标题栏下面并渐隐
     val searchBarTop = innerPadding.calculateTopPadding() + 8.dp
-    val listTop = searchBarTop + PreviewSearchBarHeight + 12.dp
+    val listTop = searchBarTop + PreviewSearchBarHeight + SummarySwitchHeight + 20.dp
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
@@ -279,13 +288,49 @@ internal fun ChatListPreview(
             }
         }
 
-        PreviewSearchBar(
-            query = searchQuery,
-            onQueryChange = { searchQuery = it },
-            resultCount = filtered.size,
-            totalCount = rounds.size,
+        Column(
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = searchBarTop),
-        )
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            PreviewSearchBar(
+                query = searchQuery,
+                onQueryChange = { searchQuery = it },
+                resultCount = filtered.size,
+                totalCount = rounds.size,
+            )
+            Surface(
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(SummarySwitchHeight)
+                        .toggleable(
+                            value = summariesEnabled,
+                            enabled = canToggleSummaries,
+                            role = Role.Switch,
+                            onValueChange = onSummariesEnabledChange,
+                        )
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.chat_page_summaries_enabled),
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Switch(
+                        checked = summariesEnabled,
+                        onCheckedChange = null,
+                        enabled = canToggleSummaries,
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -339,6 +384,7 @@ private fun List<PreviewRound>.toMapGroups(): List<MapRow> {
 }
 
 private val PreviewSearchBarHeight = 52.dp
+private val SummarySwitchHeight = 56.dp
 private const val PreviewEmptyKey = "PreviewEmpty"
 
 @Composable

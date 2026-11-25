@@ -224,7 +224,12 @@ fun List<UIMessage>.uncoveredContextIndices(readAllSummaries: Boolean): List<Int
  *
  * @param limit 触发截断的消息条数上限, 小于等于 0 表示不限制
  */
-fun List<UIMessage>.limitContext(limit: Int, readAllSummaries: Boolean = false): List<UIMessage> {
+fun List<UIMessage>.limitContext(
+    limit: Int,
+    readAllSummaries: Boolean = false,
+    summariesEnabled: Boolean = true,
+): List<UIMessage> {
+    if (!summariesEnabled) return filterNot { it.isContextCheckpoint }.limitMessageCount(limit)
     val lastCheckpoint = indexOfLast { it.isContextCheckpoint }
     if (lastCheckpoint < 0) return limitMessageCount(limit)
     val uncovered = slice(uncoveredContextIndices(readAllSummaries)).limitMessageCount(limit)
